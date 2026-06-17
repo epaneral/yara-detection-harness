@@ -1,0 +1,124 @@
+# yara-detection-harness
+
+A small, testable detection pipeline for **generated text and code**: hand-written
+YARA rules, a labeled synthetic corpus, and a regression harness that gates the
+build on recall and false-positive rate.
+
+This is detection-as-code. Rules live in version control, every rule is exercised
+against known-positive and known-benign samples on each run, and a rule cannot
+"pass" merely by compiling — it has to catch what it should and stay quiet on the
+things that look similar but aren't.
+
+> Draft note (delete before publishing): this README is the highest-signal file in
+> the repo — it's where the design reasoning shows. Sections below are written to be
+> made your own; the `> add:` markers flag where a concrete number or a first-person
+> framing belongs.
+
+## Why this exists
+
+Content-scanning at scale is a data-and-precision problem before it's a
+threat-intelligence problem. The hard part isn't writing a rule that fires on a
+reverse shell — it's writing one that fires on the reverse shell and *not* on the
+backup script three lines away that happens to redirect with `>&`. This repo is
+built around that problem: every benign sample is a deliberate **near-miss** for one
+of the malicious samples, so the suite measures precision, not just coverage.
+
+## Scope and threat model
+
+- **In scope:** malicious *text and code* artifacts — phishing-kit markup, credential
+  harvesters, shell/PowerShell droppers and stagers, exfiltration snippets. This
+  mirrors content-scanning (the kind of artifact a generation system might be asked
+  to produce), not PE/binary malware analysis.
+- **Out of scope:** real malware binaries. The corpus is fully synthetic and lives
+  in the repo, so there are no live samples on disk and the benign/malicious split
+  is under full control.
+- **Defanged by construction:** all network indicators use documentation-reserved
+  IPs (`192.0.2.0/24`, RFC 5737) and obviously-fake tokens. Nothing here is runnable.
+
+## Layout
+
+```
+rules/        YARA rules, grouped by family (powershell / shell / phishing)
+corpus/
+  malicious/  known-positive samples
+  benign/     known-benign near-misses (each shadows a malicious sample)
+tests/
+  manifest.yml  ground-truth labels + expected matches (single source of truth)
+  test_rules.py the harness
+.github/workflows/ci.yml   runs the harness on every push
+```
+
+## Corpus design
+
+The corpus is paired. For each malicious sample there is a benign sample that shares
+its surface features but not its intent:
+
+| malicious | benign near-miss | what separates them |
+|---|---|---|
+| IEX + `DownloadString` cradle | admin script: `DownloadFile` to disk | execution primitive (IEX), not the download |
+| `-enc` + hidden window | base64 *config* decode | the encoded-command + window-suppression combo |
+| `bash -i >& /dev/tcp/...` | backup with `>&` / `2>&1` redirects | `/dev/tcp` socket use |
+| `curl http://<ip> \| bash` | rustup-style `curl https://host \| sh` | raw-IP-over-http source |
+| `$_POST['password']` → `mail(attacker)` | same-origin login handler | the outbound exfil, not the capture |
+| Telegram API carrying creds | Telegram API carrying deploy status | credential context |
+
+This table is the argument the repo makes. A rule that can't tell the two columns
+apart isn't done.
+
+## The harness
+
+`tests/test_rules.py` is driven entirely by `tests/manifest.yml` — add a sample and
+its label there and it's automatically covered. Three gates:
+
+1. **Compilation** — every `.yar` file compiles; a broken rule fails the build.
+2. **Recall** — each malicious sample is caught by its expected rule(s).
+3. **False positives** — benign samples produce no matches, and the aggregate FP rate
+   across the benign corpus must stay at or below `FP_THRESHOLD` (held at `0.0` here).
+   The threshold is a single constant so the gate is explicit and tunable as the
+   corpus grows and a zero-FP bar stops being realistic.
+
+```bash
+pip install -r requirements.txt
+pytest -v
+```
+
+## Rule design notes
+
+Rules are written with YARA's matching engine in mind, not just correctness:
+
+- **Atoms over wildcards.** Conditions anchor on concrete strings (`/dev/tcp/`,
+  `api.telegram.org/bot`, `http://` before the IP regex) so the scanner gets a fast
+  first-pass match rather than being forced into full evaluation. No leading-`.*`
+  regex, no mostly-wildcard patterns.
+- **Combination over presence.** Almost every rule requires *two* primitives co-occur
+  (capture **and** exfil, encode **and** hide, fetch **and** pipe-to-shell). Single-
+  feature rules are where false positives come from; the near-miss corpus exists to
+  catch exactly that failure.
+- **Precision lever stated in each rule.** Each rule's `meta` and inline comments name
+  the one feature that keeps it off its benign twin. That's the part worth reviewing.
+
+> add: pick one rule and write a paragraph on the precision-vs-coverage tradeoff you
+> made — e.g. why `Shell_Pipe_To_Shell_From_IP` keys on raw-IP-http (tighter, misses
+> https-from-a-burner-domain droppers) rather than on `| bash` alone (broader, floods
+> on every legit installer). That tradeoff *is* the interview answer.
+
+## Roadmap (not built yet — phase 2)
+
+Deliberately out of the current scope to keep it shippable:
+
+- `yaraQA` (Florian Roth) wired in as a performance/quality **gate**, not just a runner.
+- Custom `plyara`-based checks beyond yaraQA.
+- Two-path ingestion: one scraped static source + one structured feed.
+- An MCP server wrapping an enrichment API (e.g. URL/file reputation) as callable tools.
+- A retro-hunt job running new rules over the stored corpus.
+
+## What this is not
+
+- Not production detection content — synthetic corpus, no real-world FP base rate.
+- Not trained on or tested against live malware.
+- Rule coverage is illustrative (a handful of families), chosen to demonstrate the
+  testing discipline rather than to be exhaustive.
+
+---
+
+*Author: Elyse Paneral · 2026*

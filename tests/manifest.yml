@@ -1,0 +1,56 @@
+# Ground-truth labels for the corpus. The harness is driven entirely by this file:
+# add a sample + its label here and it is automatically covered by the test suite.
+#
+# label: "malicious" | "benign"
+# expected_rules: rule names that SHOULD fire (positives). Empty for benign.
+
+samples:
+  # --- malicious -------------------------------------------------------------
+  - path: corpus/malicious/ps_iex_downloadstring.ps1
+    label: malicious
+    expected_rules: [PS_Download_Cradle_IEX]
+
+  - path: corpus/malicious/ps_encoded_hidden.ps1
+    label: malicious
+    expected_rules: [PS_Encoded_Hidden_Launcher]
+
+  - path: corpus/malicious/shell_reverse_tcp.sh
+    label: malicious
+    expected_rules: [Shell_Reverse_TCP_Bash]
+
+  - path: corpus/malicious/shell_curl_pipe_ip.sh
+    label: malicious
+    expected_rules: [Shell_Pipe_To_Shell_From_IP]
+
+  - path: corpus/malicious/phish_credential_exfil.php
+    label: malicious
+    expected_rules: [Phish_Credential_Exfil_PHP]
+
+  - path: corpus/malicious/phish_telegram_exfil.html
+    label: malicious
+    expected_rules: [Phish_Telegram_Exfil]
+
+  # --- benign (near-misses) --------------------------------------------------
+  - path: corpus/benign/ps_admin_download.ps1
+    label: benign
+    expected_rules: []
+
+  - path: corpus/benign/ps_config_base64.ps1
+    label: benign
+    expected_rules: []
+
+  - path: corpus/benign/backup_with_redirects.sh
+    label: benign
+    expected_rules: []
+
+  - path: corpus/benign/rustup_install.sh
+    label: benign
+    expected_rules: []
+
+  - path: corpus/benign/login_handler.php
+    label: benign
+    expected_rules: []
+
+  - path: corpus/benign/telegram_notify.js
+    label: benign
+    expected_rules: []
