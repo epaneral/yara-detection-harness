@@ -9,11 +9,6 @@ against known-positive and known-benign samples on each run, and a rule cannot
 "pass" merely by compiling — it has to catch what it should and stay quiet on the
 things that look similar but aren't.
 
-> Draft note (delete before publishing): this README is the highest-signal file in
-> the repo — it's where the design reasoning shows. Sections below are written to be
-> made your own; the `> add:` markers flag where a concrete number or a first-person
-> framing belongs.
-
 ## Why this exists
 
 Content-scanning at scale is a data-and-precision problem before it's a
