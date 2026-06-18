@@ -13,7 +13,7 @@ rule PS_Download_Cradle_IEX
         reference   = "Classic IEX (New-Object Net.WebClient).DownloadString pattern"
         date        = "2026-06"
     strings:
-        $iex1 = "IEX" fullword ascii wide
+        $iex1 = "IEX" fullword ascii wide nocase
         $iex2 = "Invoke-Expression" ascii wide nocase
         $dl1  = "DownloadString" ascii wide nocase
         $dl2  = "DownloadData" ascii wide nocase
