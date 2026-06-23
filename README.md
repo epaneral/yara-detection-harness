@@ -40,7 +40,8 @@ corpus/
 tests/
   manifest.yml  ground-truth labels + expected matches (single source of truth)
   test_rules.py the harness
-.github/workflows/ci.yml   runs the harness on every push
+ruff.toml     lint + format configuration for the Python (harness + MCP server)
+.github/workflows/ci.yml   runs lint, format check, and the harness on every push
 ```
 
 ## Corpus design
@@ -75,6 +76,17 @@ its label there and it's automatically covered. Three gates:
 ```bash
 pip install -r requirements.txt
 pytest -v
+```
+
+Alongside the detection gates, CI runs [`ruff`](https://docs.astral.sh/ruff/) over the
+Python (harness + MCP server) as two further gates: a **format check** (`ruff format
+--check`) and a **lint pass** (`ruff check`, covering pyflakes, bugbear, blind-except,
+pyupgrade, async and pytest-style rules). Both are version-pinned so the result depends
+only on the code, not on whichever `ruff` a runner happens to have.
+
+```bash
+ruff format --check .   # formatting gate
+ruff check .            # lint gate
 ```
 
 ## Rule design notes
