@@ -61,9 +61,6 @@ its surface features but not its intent:
 | `$_POST['password']` → `mail(attacker)` | same-origin login handler | the outbound exfil, not the capture |
 | Telegram API carrying creds | Telegram API carrying deploy status | credential context |
 
-This table is the argument the repo makes. A rule that can't tell the two columns
-apart isn't done.
-
 ## The harness
 
 `tests/test_rules.py` is driven entirely by `tests/manifest.yml` — add a sample and
@@ -115,12 +112,7 @@ Rules are written with YARA's matching engine in mind, not just correctness:
   feature rules are where false positives come from; the near-miss corpus exists to
   catch exactly that failure.
 - **Precision lever stated in each rule.** Each rule's `meta` and inline comments name
-  the one feature that keeps it off its benign twin. That's the part worth reviewing.
-
-> add: pick one rule and write a paragraph on the precision-vs-coverage tradeoff you
-> made — e.g. why `Shell_Pipe_To_Shell_From_IP` keys on raw-IP-http (tighter, misses
-> https-from-a-burner-domain droppers) rather than on `| bash` alone (broader, floods
-> on every legit installer). That tradeoff *is* the interview answer.
+  the one feature that keeps it off its benign twin.
 
 ## Roadmap (not built yet — phase 2)
 
@@ -129,7 +121,6 @@ Deliberately out of the current scope to keep it shippable:
 - `yaraQA` (Florian Roth) wired in as a performance/quality **gate**, not just a runner.
 - Custom `plyara`-based checks beyond yaraQA.
 - Two-path ingestion: one scraped static source + one structured feed.
-- An MCP server wrapping an enrichment API (e.g. URL/file reputation) as callable tools.
 - A retro-hunt job running new rules over the stored corpus.
 
 ## What this is not
