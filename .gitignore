@@ -3,3 +3,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
+# Secrets — never commit real API keys (enrichment-mcp)
+.env
