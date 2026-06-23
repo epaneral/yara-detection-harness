@@ -13,9 +13,12 @@ rule Phish_Credential_Exfil_PHP
         reference   = "Credential-harvesting kit: $_POST['password'] -> mail(attacker)"
         date        = "2026-06"
     strings:
+        // $_POST stays case-sensitive: PHP variable/superglobal names are too.
         $pw_post = "$_POST['password']" ascii
         $pw_post2 = "$_POST[\"password\"]" ascii
-        $mail    = "mail(" ascii
+        // mail() is nocase: PHP function names are case-insensitive, so a kit
+        // using Mail()/MAIL() would otherwise evade this rule.
+        $mail    = "mail(" nocase ascii
     condition:
         // Capturing a posted password is normal for any login. The exfil primitive
         // (mail() of the captured value) is what separates the kit from a benign
