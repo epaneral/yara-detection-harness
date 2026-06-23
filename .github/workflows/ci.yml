@@ -41,3 +41,25 @@ jobs:
           python-version: "3.12"
       - run: pip install -r enrichment-mcp/requirements-dev.txt
       - run: pytest enrichment-mcp -v
+
+  # Single aggregate gate. Branch protection requires only this check, so jobs
+  # can be added or renamed above without touching the protection rule - just
+  # list them in `needs` below. Every needed job must SUCCEED: anything else
+  # (failure, cancelled, or skipped) fails this gate. Skipped is treated as a
+  # failure on purpose, so no job can silently drop out of the required set;
+  # revisit once path-filtered jobs are deliberately set up.
+  all-green:
+    if: always()
+    needs: [lint, harness, enrichment-mcp]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every needed job to have succeeded
+        run: |
+          results="${{ join(needs.*.result, ' ') }}"
+          echo "needed job results: $results"
+          for r in $results; do
+            if [ "$r" != "success" ]; then
+              echo "A required job did not succeed (got '$r'). Blocking merge."
+              exit 1
+            fi
+          done
