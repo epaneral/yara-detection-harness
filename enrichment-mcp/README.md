@@ -77,9 +77,25 @@ In the Inspector, call `vt_lookup_file_hash` with a known test hash (e.g. the
 EICAR test file MD5 `44d88612fea8a8f36de82e1278abb02f`) and confirm you get a
 normalized verdict back.
 
-To wire it into an MCP client (e.g. Claude Desktop / Claude Code), point the
-client at `python /absolute/path/to/enrichment-mcp/server.py` over stdio and pass
-`VT_API_KEY` in the client's `env` block.
+### Wire it into Claude Code
+
+This repo ships a project-scoped [`.mcp.json`](../.mcp.json) at its root, so Claude
+Code discovers the server automatically — open the project and approve `enrichment-vt`
+when prompted. (MCP servers load at session start, so it appears in a *new* session.)
+It launches the server with this folder's `.venv` and reads the key from `.env`, so
+run [Setup](#setup) first; no key goes in the client config.
+
+The committed config uses the **Windows** venv path. On **macOS/Linux**, edit the
+`command` in `.mcp.json` to the POSIX path:
+
+| Platform | `.mcp.json` `command` |
+|---|---|
+| Windows | `enrichment-mcp/.venv/Scripts/python.exe` |
+| macOS/Linux | `enrichment-mcp/.venv/bin/python` |
+
+For other clients (e.g. Claude Desktop), point them at that same `.venv` interpreter
+running `server.py` over stdio; the key is read from `.env` (or pass `VT_API_KEY` in
+the client's `env` block).
 
 ## Error handling
 

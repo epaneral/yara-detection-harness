@@ -34,7 +34,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 try:
     from dotenv import load_dotenv
 
-    load_dotenv()
+    # Load the .env beside this file (not relative to the client's cwd) so the key
+    # loads regardless of where the MCP client launches the process from.
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 except ImportError:
     pass
 
