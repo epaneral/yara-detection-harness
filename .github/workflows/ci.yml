@@ -12,5 +12,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # Syntax-check the enrichment MCP server (separate component, own deps).
+      # py_compile/compileall parses without importing, so this needs no install.
+      - name: Syntax-check enrichment MCP server
+        run: python -m compileall -q enrichment-mcp -x "\.venv"
       - run: pip install -r requirements.txt
       - run: pytest -v
