@@ -5,25 +5,61 @@ on:
   pull_request:
 
 jobs:
-  test:
+  # Repo-wide quality gates. Format check runs before lint so a missed format
+  # pass surfaces as its root cause rather than as downstream E501 noise.
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # Formatting gate first: --check fails (without rewriting) if anything
-      # isn't `ruff format`-clean. Running it before lint surfaces "you forgot
-      # to format" as the root cause, instead of its downstream E501 noise.
       - name: Format check (ruff)
         run: pipx run --spec ruff==0.15.18 ruff format --check .
-      # Lint gate: catches undefined names, dead imports, blind-except, etc.
-      # across the whole repo (test harness + enrichment MCP server).
       - name: Lint (ruff)
         run: pipx run --spec ruff==0.15.18 ruff check .
-      # Syntax-check the enrichment MCP server (separate component, own deps).
-      # py_compile/compileall parses without importing, so this needs no install.
-      - name: Syntax-check enrichment MCP server
-        run: python -m compileall -q enrichment-mcp -x "\.venv"
+
+  # YARA detection harness: rules + corpus regression suite.
+  harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - run: pip install -r requirements.txt
       - run: pytest -v
+
+  # Enrichment MCP server: unit tests over its pure logic. Importing the module
+  # under test also supersedes the old compileall syntax-check.
+  enrichment-mcp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r enrichment-mcp/requirements-dev.txt
+      - run: pytest enrichment-mcp -v
+
+  # Single aggregate gate. Branch protection requires only this check, so jobs
+  # can be added or renamed above without touching the protection rule - just
+  # list them in `needs` below. Every needed job must SUCCEED: anything else
+  # (failure, cancelled, or skipped) fails this gate. Skipped is treated as a
+  # failure on purpose, so no job can silently drop out of the required set;
+  # revisit once path-filtered jobs are deliberately set up.
+  all-green:
+    if: always()
+    needs: [lint, harness, enrichment-mcp]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every needed job to have succeeded
+        run: |
+          results="${{ join(needs.*.result, ' ') }}"
+          echo "needed job results: $results"
+          for r in $results; do
+            if [ "$r" != "success" ]; then
+              echo "A required job did not succeed (got '$r'). Blocking merge."
+              exit 1
+            fi
+          done

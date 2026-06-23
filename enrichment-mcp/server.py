@@ -95,6 +95,11 @@ def _require_key() -> str | None:
     return None
 
 
+def _url_id(url: str) -> str:
+    """VirusTotal addresses a URL object by base64url(url) with padding stripped."""
+    return base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
+
+
 async def _vt_get(path: str) -> dict:
     """GET {VT_API_BASE}/{path} with auth. Lets httpx errors propagate to the caller."""
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
@@ -241,8 +246,7 @@ async def vt_lookup_url(params: UrlLookupInput) -> str:
         return key_err
 
     url = params.url
-    # VirusTotal addresses a URL object by base64url(url) with padding stripped.
-    url_id = base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
+    url_id = _url_id(url)
     try:
         data = await _vt_get(f"urls/{url_id}")
         obj = data.get("data", {})

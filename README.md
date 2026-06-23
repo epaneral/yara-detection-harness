@@ -40,8 +40,11 @@ corpus/
 tests/
   manifest.yml  ground-truth labels + expected matches (single source of truth)
   test_rules.py the harness
+enrichment-mcp/
+  server.py       VirusTotal enrichment MCP server (separate component, own deps)
+  test_server.py  unit tests for its pure logic (validation, encoding, normalize)
 ruff.toml     lint + format configuration for the Python (harness + MCP server)
-.github/workflows/ci.yml   runs lint, format check, and the harness on every push
+.github/workflows/ci.yml   per-component CI (lint / harness / enrichment-mcp) on every push
 ```
 
 ## Corpus design
@@ -87,6 +90,16 @@ only on the code, not on whichever `ruff` a runner happens to have.
 ```bash
 ruff format --check .   # formatting gate
 ruff check .            # lint gate
+```
+
+CI runs these as three independent jobs — `lint` (repo-wide ruff), `harness`
+(the rules + corpus suite), and `enrichment-mcp` (the MCP server's unit tests) —
+each set up with only the dependencies it needs. The MCP server keeps its own
+dependency set, so its tests install and run separately:
+
+```bash
+pip install -r enrichment-mcp/requirements-dev.txt
+pytest enrichment-mcp -v
 ```
 
 ## Rule design notes
