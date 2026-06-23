@@ -24,11 +24,10 @@ See README.md "Roadmap" for those.
 import base64
 import json
 import os
-from typing import Optional
 
 import httpx
-from pydantic import BaseModel, Field, field_validator, ConfigDict
 from mcp.server.fastmcp import FastMCP
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Optional convenience: auto-load a local .env when present (e.g. for Inspector
 # testing). The server works fine with a plain VT_API_KEY env var without this.
@@ -85,7 +84,7 @@ class UrlLookupInput(BaseModel):
 
 
 # --- Shared helpers --------------------------------------------------------
-def _require_key() -> Optional[str]:
+def _require_key() -> str | None:
     """Return an actionable error string if the API key is missing, else None."""
     if not VT_API_KEY:
         return (
@@ -124,7 +123,9 @@ def _handle_error(e: Exception, indicator: str) -> str:
     if isinstance(e, httpx.TimeoutException):
         return f"Error: request to VirusTotal timed out after {REQUEST_TIMEOUT:.0f}s. Try again."
     if isinstance(e, httpx.RequestError):
-        return f"Error: network error contacting VirusTotal ({type(e).__name__}). Check connectivity."
+        return (
+            f"Error: network error contacting VirusTotal ({type(e).__name__}). Check connectivity."
+        )
     return f"Error: unexpected {type(e).__name__} while looking up '{indicator}'."
 
 

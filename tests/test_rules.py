@@ -13,9 +13,10 @@ automatically covered.
 """
 
 import pathlib
-import yara
-import yaml
+
 import pytest
+import yaml
+import yara
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 RULES_DIR = REPO / "rules"
@@ -49,8 +50,7 @@ BENIGN = [s for s in SAMPLES if s["label"] == "benign"]
 
 
 # --- Gate 1: compilation ---------------------------------------------------
-@pytest.mark.parametrize("rule_file", sorted(RULES_DIR.glob("*.yar")),
-                         ids=lambda p: p.name)
+@pytest.mark.parametrize("rule_file", sorted(RULES_DIR.glob("*.yar")), ids=lambda p: p.name)
 def test_rule_file_compiles(rule_file):
     yara.compile(str(rule_file))
 
@@ -61,10 +61,7 @@ def test_positive_is_detected(sample):
     rules = compiled_rules()
     fired = matches_for(rules, sample["path"])
     missing = set(sample["expected_rules"]) - set(fired)
-    assert not missing, (
-        f"{sample['path']} missed expected rule(s) {sorted(missing)}; "
-        f"fired={fired}"
-    )
+    assert not missing, f"{sample['path']} missed expected rule(s) {sorted(missing)}; fired={fired}"
 
 
 # --- Gate 3: false positives ------------------------------------------------
@@ -80,6 +77,5 @@ def test_aggregate_fp_rate_within_threshold():
     tripped = [s["path"] for s in BENIGN if matches_for(rules, s["path"])]
     fp_rate = len(tripped) / len(BENIGN) if BENIGN else 0.0
     assert fp_rate <= FP_THRESHOLD, (
-        f"FP rate {fp_rate:.1%} exceeds threshold {FP_THRESHOLD:.1%}; "
-        f"offenders={tripped}"
+        f"FP rate {fp_rate:.1%} exceeds threshold {FP_THRESHOLD:.1%}; offenders={tripped}"
     )
