@@ -1,0 +1,19 @@
+# Lint gate for the Python in this repo (test harness + enrichment MCP server).
+# Run locally with: ruff check .
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes  - undefined names, unused imports/variables
+    "W",    # pycodestyle warnings
+    "I",    # isort     - import ordering
+    "B",    # flake8-bugbear        - likely bugs (mutable defaults, etc.)
+    "BLE",  # flake8-blind-except   - makes the BLE001 noqa in server.py meaningful
+    "UP",   # pyupgrade             - modern syntax for the target version
+    "C4",   # flake8-comprehensions
+    "RUF",  # ruff-specific         - incl. unused-noqa (guards dead suppressions)
+    "ASYNC",# flake8-async          - blocking calls inside async def (server.py)
+    "PT",   # flake8-pytest-style   - consistent fixtures/parametrize/raises
+]
