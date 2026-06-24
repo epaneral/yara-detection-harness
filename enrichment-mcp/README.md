@@ -127,6 +127,26 @@ It connects, lists the two tools, and prints a verdict for the EICAR test hash
 returns the actionable `VT_API_KEY is not set` message — proof the wiring works
 either way.
 
+Expected output (with a key):
+
+```
+connected to 'virustotal_mcp'
+tools: vt_lookup_file_hash, vt_lookup_url
+
+looking up EICAR hash 275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f ...
+{
+  "indicator": "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f",
+  "type": "file",
+  "malicious": 64,
+  "suspicious": 0,
+  "harmless": 0,
+  "undetected": 2,
+  "reputation": 3781,
+  "flagged_by": ["ALYac", "APEX", "AVG", "AhnLab-V3", "Alibaba"],
+  "permalink": "https://www.virustotal.com/gui/file/275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f"
+}
+```
+
 ## Error handling
 
 Every failure mode returns a single actionable line, never a stack trace:
