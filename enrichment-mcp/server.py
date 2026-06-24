@@ -16,9 +16,8 @@ Design notes:
   - API key is read from the VT_API_KEY environment variable, never hardcoded.
   - Local stdio transport: launched as a subprocess by an MCP client.
 
-Scope fence (deliberately NOT built here): multi-source fan-out, auto-extracting
-indicators from corpus samples, caching/persistence, and a formal eval suite.
-See README.md "Roadmap" for those.
+Scope fence (deliberately NOT built here): multi-source fan-out,
+caching/persistence, and a formal eval suite. See README.md "Roadmap" for those.
 """
 
 import base64

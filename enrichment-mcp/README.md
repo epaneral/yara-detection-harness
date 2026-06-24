@@ -74,6 +74,18 @@ re-counted, and standalone bare-domain scanning is skipped (dotted code identifi
 expected: it proves the extract → chain → aggregate *wiring*, not real detections. Point
 it at a real sample to see real verdicts.
 
+### End-to-end demo (YARA → investigate)
+
+`investigate_demo.py` ties this to the harness: it compiles the repo's YARA rules,
+scans the corpus, and runs `investigate_sample` on each *flagged* sample's text — the
+full "flag → auto-extract → chain" flow. YARA stays out of the server; only the demo
+imports it (a demo-only dep, not in `requirements.txt`):
+
+```bash
+pip install yara-python      # demo-only, into the same env as the server deps
+python investigate_demo.py   # a key in .env gives live verdicts
+```
+
 ## Setup
 
 Requires a real Python 3.10+ interpreter (the Windows Store stub won't work).
@@ -214,5 +226,4 @@ Every failure mode returns a single actionable line, never a stack trace:
 ## Roadmap (deliberately out of scope here)
 
 - Multi-source fan-out (e.g. URLhaus, Censys, urlscan) behind the same verdict shape.
-- Auto-extracting indicators from a flagged corpus sample and chaining the lookup.
 - Caching / persistence and a formal evaluation suite.
