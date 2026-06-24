@@ -22,8 +22,10 @@ See README.md "Roadmap" for those.
 """
 
 import base64
+import ipaddress
 import json
 import os
+import re
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -44,6 +46,12 @@ except ImportError:
 VT_API_BASE = "https://www.virustotal.com/api/v3"
 VT_API_KEY = os.environ.get("VT_API_KEY", "")
 REQUEST_TIMEOUT = 30.0  # seconds
+
+# Domain label/TLD shape (LDH). Used to validate domain input.
+_DOMAIN_RE = re.compile(
+    r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}",
+    re.IGNORECASE,
+)
 
 mcp = FastMCP("virustotal_mcp")
 
@@ -83,6 +91,56 @@ class UrlLookupInput(BaseModel):
         min_length=4,
         max_length=2048,
     )
+
+
+class IpLookupInput(BaseModel):
+    """Input for an IPv4-address reputation lookup."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    ip: str = Field(
+        ...,
+        description="IPv4 address to look up (e.g. '192.0.2.10')",
+        min_length=7,
+        max_length=15,
+    )
+
+    @field_validator("ip")
+    @classmethod
+    def _validate_ip(cls, v: str) -> str:
+        v = v.strip()
+        try:
+            ipaddress.IPv4Address(v)
+        except ValueError as err:
+            raise ValueError("must be a valid IPv4 address") from err
+        return v
+
+
+class DomainLookupInput(BaseModel):
+    """Input for a domain reputation lookup."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    domain: str = Field(
+        ...,
+        description="Domain name to look up (e.g. 'api.telegram.org')",
+        min_length=4,
+        max_length=253,
+    )
+
+    @field_validator("domain")
+    @classmethod
+    def _validate_domain(cls, v: str) -> str:
+        v = v.strip().lower()
+        try:
+            ipaddress.ip_address(v)
+        except ValueError:
+            pass  # not an IP literal -- good, that's what we want
+        else:
+            raise ValueError("expected a domain, not an IP address")
+        if not _DOMAIN_RE.fullmatch(v):
+            raise ValueError("must be a valid domain name")
+        return v
 
 
 # --- Shared helpers --------------------------------------------------------
@@ -136,12 +194,15 @@ def _handle_error(e: Exception, indicator: str) -> str:
     return f"Error: unexpected {type(e).__name__} while looking up '{indicator}'."
 
 
-def _normalize(indicator: str, kind: str, gui_id: str, attributes: dict) -> str:
+def _normalize(
+    indicator: str, kind: str, gui_id: str, attributes: dict, gui_kind: str | None = None
+) -> str:
     """Collapse a VirusTotal object's attributes into a compact verdict (JSON string).
 
     This is the point of the server: return the *answer*, not VT's full blob.
     The same shape is produced for every indicator type so callers (and future
-    sources) stay uniform.
+    sources) stay uniform. gui_kind overrides the permalink path segment when it
+    differs from the verdict type (e.g. permalink 'ip-address' vs type 'ip_address').
     """
     stats = attributes.get("last_analysis_stats", {}) or {}
     results = attributes.get("last_analysis_results", {}) or {}
@@ -161,9 +222,65 @@ def _normalize(indicator: str, kind: str, gui_id: str, attributes: dict) -> str:
         "undetected": stats.get("undetected", 0),
         "reputation": attributes.get("reputation"),
         "flagged_by": flagged[:5],
-        "permalink": f"https://www.virustotal.com/gui/{kind}/{gui_id}",
+        "permalink": f"https://www.virustotal.com/gui/{gui_kind or kind}/{gui_id}",
     }
     return json.dumps(verdict, indent=2)
+
+
+# --- Per-indicator lookups (shared by the tools and investigate_sample) -----
+async def _lookup_file(file_hash: str) -> str:
+    """Look up a file hash; return the normalized verdict (or an error line)."""
+    key_err = _require_key()
+    if key_err:
+        return key_err
+    try:
+        data = await _vt_get(f"files/{file_hash}")
+        obj = data.get("data", {})
+        return _normalize(file_hash, "file", obj.get("id", file_hash), obj.get("attributes", {}))
+    except Exception as e:  # noqa: BLE001 - mapped to actionable text by _handle_error
+        return _handle_error(e, file_hash)
+
+
+async def _lookup_url(url: str) -> str:
+    """Look up a URL; return the normalized verdict (or an error line)."""
+    key_err = _require_key()
+    if key_err:
+        return key_err
+    url_id = _url_id(url)
+    try:
+        data = await _vt_get(f"urls/{url_id}")
+        obj = data.get("data", {})
+        return _normalize(url, "url", obj.get("id", url_id), obj.get("attributes", {}))
+    except Exception as e:  # noqa: BLE001 - mapped to actionable text by _handle_error
+        return _handle_error(e, url)
+
+
+async def _lookup_ip(ip: str) -> str:
+    """Look up an IPv4 address; return the normalized verdict (or an error line)."""
+    key_err = _require_key()
+    if key_err:
+        return key_err
+    try:
+        data = await _vt_get(f"ip_addresses/{ip}")
+        obj = data.get("data", {})
+        return _normalize(
+            ip, "ip_address", obj.get("id", ip), obj.get("attributes", {}), gui_kind="ip-address"
+        )
+    except Exception as e:  # noqa: BLE001 - mapped to actionable text by _handle_error
+        return _handle_error(e, ip)
+
+
+async def _lookup_domain(domain: str) -> str:
+    """Look up a domain; return the normalized verdict (or an error line)."""
+    key_err = _require_key()
+    if key_err:
+        return key_err
+    try:
+        data = await _vt_get(f"domains/{domain}")
+        obj = data.get("data", {})
+        return _normalize(domain, "domain", obj.get("id", domain), obj.get("attributes", {}))
+    except Exception as e:  # noqa: BLE001 - mapped to actionable text by _handle_error
+        return _handle_error(e, domain)
 
 
 # --- Tools -----------------------------------------------------------------
@@ -204,17 +321,7 @@ async def vt_lookup_file_hash(params: HashLookupInput) -> str:
             }
         On failure, a single-line "Error: ..." or "Not found: ..." message.
     """
-    key_err = _require_key()
-    if key_err:
-        return key_err
-
-    h = params.file_hash
-    try:
-        data = await _vt_get(f"files/{h}")
-        obj = data.get("data", {})
-        return _normalize(h, "file", obj.get("id", h), obj.get("attributes", {}))
-    except Exception as e:  # noqa: BLE001 - mapped to actionable text by _handle_error
-        return _handle_error(e, h)
+    return await _lookup_file(params.file_hash)
 
 
 @mcp.tool(
@@ -243,18 +350,63 @@ async def vt_lookup_url(params: UrlLookupInput) -> str:
             vt_lookup_file_hash. On failure, a single-line "Error: ..." or
             "Not found: ..." message (404 means VT has never seen this URL).
     """
-    key_err = _require_key()
-    if key_err:
-        return key_err
+    return await _lookup_url(params.url)
 
-    url = params.url
-    url_id = _url_id(url)
-    try:
-        data = await _vt_get(f"urls/{url_id}")
-        obj = data.get("data", {})
-        return _normalize(url, "url", obj.get("id", url_id), obj.get("attributes", {}))
-    except Exception as e:  # noqa: BLE001 - mapped to actionable text by _handle_error
-        return _handle_error(e, url)
+
+@mcp.tool(
+    name="vt_lookup_ip_address",
+    annotations={
+        "title": "VirusTotal IP-Address Reputation",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+)
+async def vt_lookup_ip_address(params: IpLookupInput) -> str:
+    """Look up an IPv4 address's reputation on VirusTotal and return a normalized verdict.
+
+    Use this when an investigation surfaces an IP (e.g. a C2 or staging host) and you
+    need to know whether it is known-bad. Same normalized verdict shape as the other
+    lookups, with "type": "ip_address".
+
+    Args:
+        params (IpLookupInput): Validated input containing:
+            - ip (str): IPv4 address.
+
+    Returns:
+        str: On success, a JSON verdict with "type": "ip_address". On failure, a
+            single-line "Error: ..." or "Not found: ..." message.
+    """
+    return await _lookup_ip(params.ip)
+
+
+@mcp.tool(
+    name="vt_lookup_domain",
+    annotations={
+        "title": "VirusTotal Domain Reputation",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+)
+async def vt_lookup_domain(params: DomainLookupInput) -> str:
+    """Look up a domain's reputation on VirusTotal and return a normalized verdict.
+
+    Use this when an investigation surfaces a domain and you need to know whether it
+    is known-bad. Same normalized verdict shape as the other lookups, with
+    "type": "domain".
+
+    Args:
+        params (DomainLookupInput): Validated input containing:
+            - domain (str): Domain name.
+
+    Returns:
+        str: On success, a JSON verdict with "type": "domain". On failure, a
+            single-line "Error: ..." or "Not found: ..." message.
+    """
+    return await _lookup_domain(params.domain)
 
 
 if __name__ == "__main__":

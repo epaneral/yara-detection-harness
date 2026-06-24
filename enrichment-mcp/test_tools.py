@@ -100,3 +100,53 @@ def test_tool_maps_404_to_not_found(monkeypatch):
     out = asyncio.run(server.vt_lookup_file_hash(server.HashLookupInput(file_hash=GOOD_HASH)))
 
     assert out.startswith("Not found:")
+
+
+# --- vt_lookup_ip_address / vt_lookup_domain -------------------------------
+def test_ip_tool_returns_verdict(monkeypatch):
+    monkeypatch.setattr(server, "VT_API_KEY", "test-key-not-real")
+    captured = {}
+    payload = {
+        "data": {"id": "192.0.2.44", "attributes": {"last_analysis_stats": {"malicious": 3}}}
+    }
+    monkeypatch.setattr(server, "_vt_get", _stub_vt_get(captured, payload))
+
+    out = _verdict(server.vt_lookup_ip_address(server.IpLookupInput(ip="192.0.2.44")))
+
+    assert captured["path"] == "ip_addresses/192.0.2.44"  # raw IP, not base64
+    assert out["type"] == "ip_address"
+    assert out["indicator"] == "192.0.2.44"
+    assert out["malicious"] == 3
+    assert out["permalink"].endswith("/ip-address/192.0.2.44")  # GUI path differs from type
+
+
+def test_domain_tool_returns_verdict(monkeypatch):
+    monkeypatch.setattr(server, "VT_API_KEY", "test-key-not-real")
+    captured = {}
+    payload = {
+        "data": {"id": "api.telegram.org", "attributes": {"last_analysis_stats": {"malicious": 0}}}
+    }
+    monkeypatch.setattr(server, "_vt_get", _stub_vt_get(captured, payload))
+
+    out = _verdict(server.vt_lookup_domain(server.DomainLookupInput(domain="api.telegram.org")))
+
+    assert captured["path"] == "domains/api.telegram.org"
+    assert out["type"] == "domain"
+    assert out["indicator"] == "api.telegram.org"
+    assert out["permalink"].endswith("/domain/api.telegram.org")
+
+
+def test_ip_tool_missing_key_short_circuits(monkeypatch):
+    monkeypatch.setattr(server, "VT_API_KEY", "")
+    called = {"hit": False}
+
+    async def _should_not_run(path):
+        called["hit"] = True
+        return {}
+
+    monkeypatch.setattr(server, "_vt_get", _should_not_run)
+
+    out = asyncio.run(server.vt_lookup_ip_address(server.IpLookupInput(ip="192.0.2.44")))
+
+    assert "VT_API_KEY is not set" in out
+    assert called["hit"] is False

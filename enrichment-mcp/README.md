@@ -18,6 +18,8 @@ more reputation sources could slot in behind the same normalized verdict.
 |---|---|---|
 | `vt_lookup_file_hash` | `file_hash` (MD5 / SHA-1 / SHA-256) | normalized verdict |
 | `vt_lookup_url` | `url` (incl. scheme) | normalized verdict |
+| `vt_lookup_ip_address` | `ip` (IPv4) | normalized verdict |
+| `vt_lookup_domain` | `domain` | normalized verdict |
 
 Both return the **same normalized shape** — the answer, not VirusTotal's raw
 500-field blob:
