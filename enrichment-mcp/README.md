@@ -20,9 +20,11 @@ more reputation sources could slot in behind the same normalized verdict.
 | `vt_lookup_url` | `url` (incl. scheme) | normalized verdict |
 | `vt_lookup_ip_address` | `ip` (IPv4) | normalized verdict |
 | `vt_lookup_domain` | `domain` | normalized verdict |
+| `extract_indicators` | `text` | URLs / IPs / domains in the text (no network) |
+| `investigate_sample` | `text`, `max_indicators` | extract + chain a lookup per indicator → aggregated report |
 
-Both return the **same normalized shape** — the answer, not VirusTotal's raw
-500-field blob:
+The four `vt_lookup_*` tools return the **same normalized shape** — the answer, not
+VirusTotal's raw 500-field blob:
 
 ```json
 {
@@ -38,8 +40,39 @@ Both return the **same normalized shape** — the answer, not VirusTotal's raw
 }
 ```
 
-Both tools are **read-only** (GET lookups only — nothing is submitted, modified,
-or deleted) and annotated accordingly.
+All tools are **read-only**: the lookups are GET-only (nothing is submitted,
+modified, or deleted), and `extract_indicators` makes no network call at all.
+
+## Chained investigation
+
+`investigate_sample` is the "auto-extract + chain" step after a YARA rule fires: hand
+it a flagged sample's **text** and it extracts the indicators (same logic as
+`extract_indicators`), looks each up sequentially (to respect the free-tier rate limit),
+and returns one aggregated report:
+
+```json
+{
+  "summary": {"indicators_found": 2, "looked_up": 2, "skipped_for_cap": 0,
+              "malicious": 1, "suspicious": 0, "clean_or_unknown": 0,
+              "not_found": 1, "errors": 0},
+  "results": [
+    {"indicator": "http://192.0.2.77/install.sh", "type": "url", "verdict": { ... }},
+    {"indicator": "192.0.2.44", "type": "ip_address", "error": "Not found: ..."}
+  ],
+  "skipped": [],
+  "note": "Looked up 2 of 2 indicators sequentially; VT free tier is ~4/min, 500/day."
+}
+```
+
+Each result carries a `verdict` *or* an `error`, so one indicator's 404/429 never sinks
+the rest. Extraction pulls URLs, bare IPv4s, and email domains; a host inside a URL is not
+re-counted, and standalone bare-domain scanning is skipped (dotted code identifiers like
+`System.Net.WebClient` are indistinguishable from domains without a TLD list).
+
+**Defanged-corpus caveat:** the repo's corpus is synthetic — RFC 5737 `192.0.2.x`,
+`*.example.*`, fake tokens — so live lookups on it mostly return `not_found`. That is
+expected: it proves the extract → chain → aggregate *wiring*, not real detections. Point
+it at a real sample to see real verdicts.
 
 ## Setup
 

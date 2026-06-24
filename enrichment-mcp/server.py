@@ -47,11 +47,19 @@ VT_API_BASE = "https://www.virustotal.com/api/v3"
 VT_API_KEY = os.environ.get("VT_API_KEY", "")
 REQUEST_TIMEOUT = 30.0  # seconds
 
-# Domain label/TLD shape (LDH). Used to validate domain input.
+# Indicator-extraction patterns. Domains are taken from URL hosts and email
+# addresses only; standalone bare-domain scanning is skipped because dotted code
+# identifiers (e.g. System.Net.WebClient) are indistinguishable from domains
+# without a TLD list (future work).
+_URL_RE = re.compile(r"""https?://[^\s"'<>)\]}]+""", re.IGNORECASE)
+_IPV4_RE = re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b")
+_EMAIL_RE = re.compile(r"[a-z0-9._%+-]+@([a-z0-9.-]+\.[a-z]{2,63})", re.IGNORECASE)
+# Domain label/TLD shape (LDH); validates domain input (DomainLookupInput).
 _DOMAIN_RE = re.compile(
     r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}",
     re.IGNORECASE,
 )
+_URL_TRAILING_PUNCT = ".,;:!?)\"']}>"
 
 mcp = FastMCP("virustotal_mcp")
 
@@ -143,6 +151,38 @@ class DomainLookupInput(BaseModel):
         return v
 
 
+class ExtractInput(BaseModel):
+    """Input for indicator extraction from sample text."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(
+        ...,
+        description="Sample text (e.g. a flagged corpus sample) to scan for indicators",
+        min_length=1,
+        max_length=200_000,
+    )
+
+
+class InvestigateInput(BaseModel):
+    """Input for a chained sample investigation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(
+        ...,
+        description="Sample text to extract indicators from and look up",
+        min_length=1,
+        max_length=200_000,
+    )
+    max_indicators: int = Field(
+        10,
+        description="Max indicators to look up (the rest are reported as skipped)",
+        ge=1,
+        le=25,
+    )
+
+
 # --- Shared helpers --------------------------------------------------------
 def _require_key() -> str | None:
     """Return an actionable error string if the API key is missing, else None."""
@@ -227,6 +267,46 @@ def _normalize(
     return json.dumps(verdict, indent=2)
 
 
+def _extract_indicators(text: str) -> list[dict]:
+    """Extract network indicators (URLs, bare IPv4s, email domains) from sample text.
+
+    URLs are matched first and their spans masked, so a host *inside* a URL is not
+    re-emitted as a separate IP. Domains come from email addresses only -- URL hosts
+    are already captured as URLs, and standalone bare-domain scanning is skipped
+    because dotted code identifiers (e.g. System.Net.WebClient) are indistinguishable
+    from domains without a TLD list. No file hashes (the corpus has none).
+
+    Returns [{"indicator": str, "type": "url"|"ip_address"|"domain"}], deduped
+    case-insensitively, ordered URLs then IPs then domains (first-seen within each).
+    """
+    indicators: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(value: str, kind: str) -> None:
+        key = (kind, value.lower())
+        if key not in seen:
+            seen.add(key)
+            indicators.append({"indicator": value, "type": kind})
+
+    # URLs first; blank their spans so hosts inside a URL aren't re-counted.
+    masked = list(text)
+    for m in _URL_RE.finditer(text):
+        url = m.group(0).rstrip(_URL_TRAILING_PUNCT)
+        add(url, "url")
+        for i in range(m.start(), m.start() + len(url)):
+            masked[i] = " "
+    masked_text = "".join(masked)
+
+    for m in _IPV4_RE.finditer(masked_text):
+        add(m.group(0), "ip_address")
+
+    # Domains: from email addresses only (URL hosts are already covered above).
+    for m in _EMAIL_RE.finditer(masked_text):
+        add(m.group(1).lower(), "domain")
+
+    return indicators
+
+
 # --- Per-indicator lookups (shared by the tools and investigate_sample) -----
 async def _lookup_file(file_hash: str) -> str:
     """Look up a file hash; return the normalized verdict (or an error line)."""
@@ -281,6 +361,18 @@ async def _lookup_domain(domain: str) -> str:
         return _normalize(domain, "domain", obj.get("id", domain), obj.get("attributes", {}))
     except Exception as e:  # noqa: BLE001 - mapped to actionable text by _handle_error
         return _handle_error(e, domain)
+
+
+async def _dispatch_lookup(indicator: dict) -> str:
+    """Route an extracted indicator to the matching per-type lookup."""
+    value, kind = indicator["indicator"], indicator["type"]
+    if kind == "url":
+        return await _lookup_url(value)
+    if kind == "ip_address":
+        return await _lookup_ip(value)
+    if kind == "domain":
+        return await _lookup_domain(value)
+    return f"Error: unknown indicator type '{kind}'"
 
 
 # --- Tools -----------------------------------------------------------------
@@ -407,6 +499,107 @@ async def vt_lookup_domain(params: DomainLookupInput) -> str:
             single-line "Error: ..." or "Not found: ..." message.
     """
     return await _lookup_domain(params.domain)
+
+
+@mcp.tool(
+    name="extract_indicators",
+    annotations={
+        "title": "Extract Indicators from Text",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+def extract_indicators(params: ExtractInput) -> str:
+    """Extract network indicators (URLs, IPv4s, domains) from sample text.
+
+    Pure and local -- no network, no API key. Use this to triage a flagged sample
+    before spending lookup budget, or to choose which indicators to look up.
+
+    Args:
+        params (ExtractInput): Validated input containing:
+            - text (str): the sample text to scan.
+
+    Returns:
+        str: JSON {"count": int, "indicators": [{"indicator": str, "type": str}]}
+            where type is "url", "ip_address", or "domain".
+    """
+    inds = _extract_indicators(params.text)
+    return json.dumps({"count": len(inds), "indicators": inds}, indent=2)
+
+
+@mcp.tool(
+    name="investigate_sample",
+    annotations={
+        "title": "Investigate Sample (extract + chain lookups)",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+)
+async def investigate_sample(params: InvestigateInput) -> str:
+    """Extract indicators from sample text and chain a VirusTotal lookup for each.
+
+    The chained capability behind the "auto-extract + chain" roadmap item: hand it a
+    flagged sample's text and it extracts the indicators, looks each up (sequentially,
+    to respect the free-tier rate limit), and returns one aggregated report. A single
+    indicator's 404/429/error becomes that row's "error" without sinking the rest.
+
+    Args:
+        params (InvestigateInput): Validated input containing:
+            - text (str): the sample text.
+            - max_indicators (int): cap on lookups (default 10, max 25).
+
+    Returns:
+        str: JSON with a "summary" tally, per-indicator "results" (each carrying a
+            "verdict" or an "error"), any "skipped" indicators beyond the cap, and a
+            "note". On a missing key, the single-line key-not-set message.
+    """
+    key_err = _require_key()
+    if key_err:
+        return key_err
+
+    indicators = _extract_indicators(params.text)
+    looked = indicators[: params.max_indicators]
+    skipped = indicators[params.max_indicators :]
+
+    tally = {"malicious": 0, "suspicious": 0, "clean_or_unknown": 0, "not_found": 0, "errors": 0}
+    results = []
+    for ind in looked:
+        raw = await _dispatch_lookup(ind)
+        row = {"indicator": ind["indicator"], "type": ind["type"]}
+        try:
+            verdict = json.loads(raw)
+        except ValueError:
+            row["error"] = raw
+            tally["not_found" if raw.startswith("Not found:") else "errors"] += 1
+        else:
+            row["verdict"] = verdict
+            if verdict.get("malicious", 0) > 0:
+                tally["malicious"] += 1
+            elif verdict.get("suspicious", 0) > 0:
+                tally["suspicious"] += 1
+            else:
+                tally["clean_or_unknown"] += 1
+        results.append(row)
+
+    report = {
+        "summary": {
+            "indicators_found": len(indicators),
+            "looked_up": len(looked),
+            "skipped_for_cap": len(skipped),
+            **tally,
+        },
+        "results": results,
+        "skipped": skipped,
+        "note": (
+            f"Looked up {len(looked)} of {len(indicators)} indicators sequentially; "
+            "VT free tier is ~4/min, 500/day."
+        ),
+    }
+    return json.dumps(report, indent=2)
 
 
 if __name__ == "__main__":
