@@ -147,6 +147,16 @@ looking up EICAR hash 275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf6
 }
 ```
 
+### Live in an MCP client
+
+The same tools wired into Claude Desktop: a natural-language ask invokes the
+`enrichment-vt` tool, which returns the normalized verdict (here for the EICAR
+test hash).
+
+![Hash-lookup ask invoking the enrichment-vt tool in Claude Desktop](../docs/enrichment-vt-lookup.png)
+
+![The normalized VirusTotal verdict returned in Claude Desktop](../docs/enrichment-vt-verdict.png)
+
 ## Error handling
 
 Every failure mode returns a single actionable line, never a stack trace:
