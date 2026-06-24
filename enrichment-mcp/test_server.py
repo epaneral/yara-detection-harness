@@ -68,6 +68,38 @@ def test_url_input_forbids_extra_fields():
         server.UrlLookupInput(url="http://example.com", sneaky="x")
 
 
+# --- IpLookupInput ---------------------------------------------------------
+def test_ip_input_accepts_and_strips():
+    assert server.IpLookupInput(ip="  192.0.2.44  ").ip == "192.0.2.44"
+
+
+@pytest.mark.parametrize("bad", ["999.1.1.1", "192.0.2", "not.an.ip", "::1"])
+def test_ip_input_rejects_invalid(bad):
+    with pytest.raises(ValidationError):
+        server.IpLookupInput(ip=bad)
+
+
+def test_ip_input_forbids_extra_fields():
+    with pytest.raises(ValidationError):
+        server.IpLookupInput(ip="192.0.2.44", sneaky="x")
+
+
+# --- DomainLookupInput -----------------------------------------------------
+def test_domain_input_accepts_and_lowercases():
+    assert server.DomainLookupInput(domain="API.Telegram.ORG").domain == "api.telegram.org"
+
+
+@pytest.mark.parametrize("bad", ["192.0.2.5", "nodot", "bad_underscore.com", "-bad.com"])
+def test_domain_input_rejects_invalid(bad):
+    with pytest.raises(ValidationError):
+        server.DomainLookupInput(domain=bad)
+
+
+def test_domain_input_forbids_extra_fields():
+    with pytest.raises(ValidationError):
+        server.DomainLookupInput(domain="api.telegram.org", sneaky="x")
+
+
 # --- _url_id (base64url, padding stripped) ---------------------------------
 def test_url_id_matches_known_vt_value():
     # VirusTotal's documented URL identifier for this URL.
