@@ -97,6 +97,36 @@ For other clients (e.g. Claude Desktop), point them at that same `.venv` interpr
 running `server.py` over stdio; the key is read from `.env` (or pass `VT_API_KEY` in
 the client's `env` block).
 
+## Verify it works
+
+Two ways to confirm the tools work after cloning — pick by whether you have a
+(free) VirusTotal key. Both run from the repo root.
+
+**No key, no network — the tool logic, deterministically:**
+
+```bash
+pip install -r enrichment-mcp/requirements-dev.txt
+pytest enrichment-mcp -v
+```
+
+`test_server.py` covers the pure helpers; `test_tools.py` drives the `vt_lookup_*`
+tools end-to-end with the network stubbed — validation → fetch → normalize →
+verdict, plus the missing-key and 404 paths. No API key, no internet; these also
+run in CI.
+
+**With a free key — a live call against VirusTotal:**
+
+Put your key in `.env` (see [Setup](#setup)), then drive the real server over stdio:
+
+```bash
+python enrichment-mcp/smoke_test.py
+```
+
+It connects, lists the two tools, and prints a verdict for the EICAR test hash
+(dozens of engines `malicious`). Without a key it still connects and the tool
+returns the actionable `VT_API_KEY is not set` message — proof the wiring works
+either way.
+
 ## Error handling
 
 Every failure mode returns a single actionable line, never a stack trace:
