@@ -97,6 +97,66 @@ For other clients (e.g. Claude Desktop), point them at that same `.venv` interpr
 running `server.py` over stdio; the key is read from `.env` (or pass `VT_API_KEY` in
 the client's `env` block).
 
+## Verify it works
+
+Two ways to confirm the tools work after cloning — pick by whether you have a
+(free) VirusTotal key. Both run from the repo root.
+
+**No key, no network — the tool logic, deterministically:**
+
+```bash
+pip install -r enrichment-mcp/requirements-dev.txt
+pytest enrichment-mcp -v
+```
+
+`test_server.py` covers the pure helpers; `test_tools.py` drives the `vt_lookup_*`
+tools end-to-end with the network stubbed — validation → fetch → normalize →
+verdict, plus the missing-key and 404 paths. No API key, no internet; these also
+run in CI.
+
+**With a free key — a live call against VirusTotal:**
+
+Put your key in `.env` (see [Setup](#setup)), then drive the real server over stdio:
+
+```bash
+python enrichment-mcp/smoke_test.py
+```
+
+It connects, lists the two tools, and prints a verdict for the EICAR test hash
+(dozens of engines `malicious`). Without a key it still connects and the tool
+returns the actionable `VT_API_KEY is not set` message — proof the wiring works
+either way.
+
+Expected output (with a key):
+
+```
+connected to 'virustotal_mcp'
+tools: vt_lookup_file_hash, vt_lookup_url
+
+looking up EICAR hash 275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f ...
+{
+  "indicator": "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f",
+  "type": "file",
+  "malicious": 64,
+  "suspicious": 0,
+  "harmless": 0,
+  "undetected": 2,
+  "reputation": 3781,
+  "flagged_by": ["ALYac", "APEX", "AVG", "AhnLab-V3", "Alibaba"],
+  "permalink": "https://www.virustotal.com/gui/file/275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f"
+}
+```
+
+### Live in an MCP client
+
+The same tools wired into Claude Desktop: a natural-language ask invokes the
+`enrichment-vt` tool, which returns the normalized verdict (here for the EICAR
+test hash).
+
+![Hash-lookup ask invoking the enrichment-vt tool in Claude Desktop](../docs/enrichment-vt-lookup.png)
+
+![The normalized VirusTotal verdict returned in Claude Desktop](../docs/enrichment-vt-verdict.png)
+
 ## Error handling
 
 Every failure mode returns a single actionable line, never a stack trace:

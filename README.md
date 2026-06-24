@@ -1,5 +1,7 @@
 # yara-detection-harness
 
+[![CI](https://github.com/epaneral/yara-detection-harness/actions/workflows/ci.yml/badge.svg)](https://github.com/epaneral/yara-detection-harness/actions/workflows/ci.yml)
+
 A small, testable detection pipeline for **generated text and code**: hand-written
 YARA rules, a labeled synthetic corpus, and a regression harness that gates the
 build on recall and false-positive rate.
