@@ -10,6 +10,7 @@ rule Phish_Credential_Exfil_PHP
         description = "PHP that captures posted credentials and ships them out via mail()"
         family      = "phishing.harvester"
         severity    = "high"
+        attack      = "T1056.003"
         reference   = "Credential-harvesting kit: $_POST['password'] -> mail(attacker)"
         date        = "2026-06"
     strings:
@@ -33,6 +34,7 @@ rule Phish_Telegram_Exfil
         description = "Telegram Bot API sendMessage used to exfiltrate captured credentials"
         family      = "phishing.exfil"
         severity    = "high"
+        attack      = "T1567"
         reference   = "api.telegram.org/bot<token>/sendMessage carrying login/password"
         date        = "2026-06"
     strings:

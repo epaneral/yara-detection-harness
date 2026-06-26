@@ -1,12 +1,15 @@
 """
 Corpus-based regression harness for the YARA ruleset.
 
-Three gates, all driven by tests/manifest.yml:
+Four gates, all driven by tests/manifest.yml:
 
   1. compilation   - every .yar file compiles (a broken rule fails the build)
   2. recall        - each malicious sample is caught by its expected rule(s)
   3. false-positive- benign near-misses produce no matches; the aggregate FP
                      rate across the benign corpus must stay <= FP_THRESHOLD
+  4. integrity     - the manifest and ruleset stay in sync: no orphan rule
+                     (defined but unexercised), no expected_rules naming a
+                     non-existent rule, and every referenced sample path exists
 
 The manifest is the single source of truth: add a sample there and it is
 automatically covered.
@@ -48,6 +51,14 @@ SAMPLES = load_manifest()
 MALICIOUS = [s for s in SAMPLES if s["label"] == "malicious"]
 BENIGN = [s for s in SAMPLES if s["label"] == "benign"]
 
+# Every rule name the manifest claims should fire, across all samples.
+EXPECTED_RULES = {name for s in SAMPLES for name in (s.get("expected_rules") or [])}
+
+
+def defined_rules():
+    """Identifiers of every rule that actually compiles from rules/."""
+    return {r.identifier for r in compiled_rules()}
+
 
 # --- Gate 1: compilation ---------------------------------------------------
 @pytest.mark.parametrize("rule_file", sorted(RULES_DIR.glob("*.yar")), ids=lambda p: p.name)
@@ -79,3 +90,25 @@ def test_aggregate_fp_rate_within_threshold():
     assert fp_rate <= FP_THRESHOLD, (
         f"FP rate {fp_rate:.1%} exceeds threshold {FP_THRESHOLD:.1%}; offenders={tripped}"
     )
+
+
+# --- Gate 4: manifest <-> ruleset integrity --------------------------------
+def test_every_defined_rule_is_covered():
+    """No rule ships without a malicious sample exercising it."""
+    orphans = defined_rules() - EXPECTED_RULES
+    assert not orphans, (
+        f"orphan rule(s) not exercised by any sample: {sorted(orphans)}; "
+        "add a malicious sample to tests/manifest.yml that expects each"
+    )
+
+
+def test_expected_rules_reference_real_rules():
+    """Every name in the manifest's expected_rules resolves to a compiled rule."""
+    unknown = EXPECTED_RULES - defined_rules()
+    assert not unknown, f"manifest names unknown rule(s) (typo or removed rule?): {sorted(unknown)}"
+
+
+@pytest.mark.parametrize("sample", SAMPLES, ids=lambda s: s["path"])
+def test_manifest_paths_exist(sample):
+    path = REPO / sample["path"]
+    assert path.is_file(), f"manifest references missing sample file: {sample['path']}"

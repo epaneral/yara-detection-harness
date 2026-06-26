@@ -114,7 +114,8 @@ testing; `.env` is gitignored).
 ## Run / test it
 
 The server speaks **stdio** and is normally launched by an MCP client. To poke
-the tools by hand, use the MCP Inspector:
+the tools by hand, use the MCP Inspector (with the [Setup](#setup) venv active, so
+`python` resolves to the interpreter that has the deps):
 
 ```bash
 npx @modelcontextprotocol/inspector python server.py
@@ -178,7 +179,7 @@ Put your key in `.env` (see [Setup](#setup)), then drive the real server over st
 python enrichment-mcp/smoke_test.py
 ```
 
-It connects, lists the two tools, and prints a verdict for the EICAR test hash
+It connects, lists the tools, and prints a verdict for the EICAR test hash
 (dozens of engines `malicious`). Without a key it still connects and the tool
 returns the actionable `VT_API_KEY is not set` message — proof the wiring works
 either way.
@@ -187,7 +188,7 @@ Expected output (with a key):
 
 ```
 connected to 'virustotal_mcp'
-tools: vt_lookup_file_hash, vt_lookup_url
+tools: vt_lookup_file_hash, vt_lookup_url, vt_lookup_ip_address, vt_lookup_domain, extract_indicators, investigate_sample
 
 looking up EICAR hash 275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f ...
 {
