@@ -35,6 +35,7 @@ protection requires; a skipped needed job fails it on purpose.
   (single-feature rules cause FPs); anchor on concrete string atoms, not leading-`.*` regex;
   each rule's `meta`/comments name the one feature keeping it off its benign twin — keep that
   comment accurate when editing.
-- **enrichment-mcp/** — self-contained VirusTotal MCP server (`server.py`, stdio, two read-only
-  tools, normalized verdict shape). Separate deps; not run by the bare `pytest`. `VT_API_KEY`
+- **enrichment-mcp/** — self-contained VirusTotal MCP server (`server.py`, stdio, read-only
+  reputation lookups (hash/URL/IP/domain) plus extract/investigate tools, normalized verdict
+  shape). Separate deps; not run by the bare `pytest`. `VT_API_KEY`
   from env; failures return one actionable line, never a stack trace.

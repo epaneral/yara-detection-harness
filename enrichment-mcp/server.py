@@ -7,7 +7,7 @@ malicious *patterns*; the natural next question in an investigation is
 "this rule fired -- is the indicator it surfaced actually known-bad?"
 This server wraps the VirusTotal v3 reputation API as MCP tools an LLM agent
 can call mid-investigation, returning a *normalized* verdict for an indicator
-(a file hash or a URL) instead of VirusTotal's full raw report.
+(a file hash, URL, IP, or domain) instead of VirusTotal's full raw report.
 
 Design notes:
   - Read-only. Only GET lookups; nothing here submits, mutates, or deletes.
