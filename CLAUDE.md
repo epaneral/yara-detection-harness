@@ -34,7 +34,8 @@ protection requires; a skipped needed job fails it on purpose.
 - **Rule conventions** (`rules/`, grouped by family): require two primitives to co-occur
   (single-feature rules cause FPs); anchor on concrete string atoms, not leading-`.*` regex;
   each rule's `meta`/comments name the one feature keeping it off its benign twin — keep that
-  comment accurate when editing.
+  comment accurate when editing. Each rule's `meta` also carries an `attack` field listing the
+  MITRE ATT&CK technique ID(s) it detects (comma-separated) — add it when writing a new rule.
 - **enrichment-mcp/** — self-contained VirusTotal MCP server (`server.py`, stdio, read-only
   reputation lookups (hash/URL/IP/domain) plus extract/investigate tools, normalized verdict
   shape). Separate deps; not run by the bare `pytest`. `VT_API_KEY`

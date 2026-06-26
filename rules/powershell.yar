@@ -10,6 +10,7 @@ rule PS_Download_Cradle_IEX
         description = "PowerShell download-and-execute cradle: Invoke-Expression over a remotely fetched string"
         family      = "powershell.cradle"
         severity    = "high"
+        attack      = "T1059.001, T1105"
         reference   = "Classic IEX (New-Object Net.WebClient).DownloadString pattern"
         date        = "2026-06"
     strings:
@@ -30,6 +31,7 @@ rule PS_Encoded_Hidden_Launcher
         description = "PowerShell launched with an encoded command and a suppressed window"
         family      = "powershell.encoded"
         severity    = "high"
+        attack      = "T1059.001, T1027.010, T1564.003"
         reference   = "powershell -nop -w hidden -enc <base64>"
         date        = "2026-06"
     strings:
