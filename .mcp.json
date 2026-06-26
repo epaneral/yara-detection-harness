@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "enrichment-vt": {
-      "command": "enrichment-mcp/.venv/Scripts/python.exe",
+      "command": "${ENRICHMENT_VENV_PYTHON:-enrichment-mcp/.venv/Scripts/python.exe}",
       "args": ["enrichment-mcp/server.py"]
     }
   }
