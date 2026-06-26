@@ -132,13 +132,22 @@ when prompted. (MCP servers load at session start, so it appears in a *new* sess
 It launches the server with this folder's `.venv` and reads the key from `.env`, so
 run [Setup](#setup) first; no key goes in the client config.
 
-The committed config uses the **Windows** venv path. On **macOS/Linux**, edit the
-`command` in `.mcp.json` to the POSIX path:
+The `command` resolves the venv interpreter cross-platform via env-var expansion:
+`${ENRICHMENT_VENV_PYTHON:-enrichment-mcp/.venv/Scripts/python.exe}`. The default is
+the **Windows** venv path, so Windows works with no extra step. On **macOS/Linux**,
+the venv puts Python under `bin/` instead of `Scripts/`, so set `ENRICHMENT_VENV_PYTHON`
+to the POSIX path before launching the client (the value still points at this folder's
+`.venv`, so it keeps the dependency-carrying interpreter):
 
-| Platform | `.mcp.json` `command` |
+```bash
+# bash/zsh — set in your shell profile so every session sees it
+export ENRICHMENT_VENV_PYTHON="enrichment-mcp/.venv/bin/python"
+```
+
+| Platform | venv interpreter used |
 |---|---|
-| Windows | `enrichment-mcp/.venv/Scripts/python.exe` |
-| macOS/Linux | `enrichment-mcp/.venv/bin/python` |
+| Windows | `enrichment-mcp/.venv/Scripts/python.exe` (default — nothing to set) |
+| macOS/Linux | `enrichment-mcp/.venv/bin/python` (via `ENRICHMENT_VENV_PYTHON`) |
 
 For other clients (e.g. Claude Desktop), point them at that same `.venv` interpreter
 running `server.py` over stdio; the key is read from `.env` (or pass `VT_API_KEY` in
