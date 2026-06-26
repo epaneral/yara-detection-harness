@@ -30,6 +30,19 @@ samples:
     label: malicious
     expected_rules: [Phish_Telegram_Exfil]
 
+  # obfuscated variants (trivial evasions of the rules above)
+  - path: corpus/malicious/shell_curl_pipe_ip_https.sh
+    label: malicious
+    expected_rules: [Shell_Pipe_To_Shell_From_IP]
+
+  - path: corpus/malicious/ps_encoded_abbrev_hidden.ps1
+    label: malicious
+    expected_rules: [PS_Encoded_Hidden_Launcher]
+
+  - path: corpus/malicious/phish_mail_space.php
+    label: malicious
+    expected_rules: [Phish_Credential_Exfil_PHP]
+
   # --- benign (near-misses) --------------------------------------------------
   - path: corpus/benign/ps_admin_download.ps1
     label: benign
@@ -56,5 +69,18 @@ samples:
     expected_rules: []
 
   - path: corpus/benign/telegram_notify.js
+    label: benign
+    expected_rules: []
+
+  # shadows for the obfuscated-variant malicious samples above
+  - path: corpus/benign/installer_pipe_https.sh
+    label: benign
+    expected_rules: []
+
+  - path: corpus/benign/ps_out_file_encoding.ps1
+    label: benign
+    expected_rules: []
+
+  - path: corpus/benign/contact_form_mail.php
     label: benign
     expected_rules: []
