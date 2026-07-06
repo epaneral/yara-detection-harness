@@ -26,11 +26,15 @@ protection requires; a skipped needed job fails it on purpose.
 
 - **Manifest-driven harness.** `tests/manifest.yml` (label + `expected_rules` per sample) is
   the single source of truth; `tests/test_rules.py` parametrizes over it — add a sample to the
-  manifest and it's covered automatically. Three gates: compilation, recall, and FP rate
-  (`<= FP_THRESHOLD`, a constant currently `0.0` — any benign match fails CI).
+  manifest and it's covered automatically. Four gates: compilation, recall, FP rate
+  (`<= FP_THRESHOLD`, a constant currently `0.0` — any benign match fails CI), and
+  manifest/ruleset integrity (no orphan rule, no unknown rule name in `expected_rules`,
+  no missing sample path).
 - **Paired corpus.** Every `corpus/malicious/*` sample has a `corpus/benign/*` near-miss that
   shares its surface features but not its intent. The benign column measures precision — add a
-  benign shadow whenever you add a malicious sample.
+  benign shadow whenever you add a malicious sample. Sample comments are scanned content too
+  (YARA is syntax-blind) — never quote a rule's literal atoms in a sample's comments; describe
+  the near-miss without spelling the atoms out. The FP gate catches violations.
 - **Rule conventions** (`rules/`, grouped by family): require two primitives to co-occur
   (single-feature rules cause FPs); anchor on concrete string atoms, not leading-`.*` regex;
   each rule's `meta`/comments name the one feature keeping it off its benign twin — keep that
