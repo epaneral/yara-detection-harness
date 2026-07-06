@@ -126,6 +126,17 @@ Rules are written with YARA's matching engine in mind, not just correctness:
   (capture **and** exfil, encode **and** hide, fetch **and** pipe-to-shell). Single-
   feature rules are where false positives come from; the near-miss corpus exists to
   catch exactly that failure.
+- **Precision over recall — accepted false negatives.** The flip side of the rule above:
+  each rule is scoped to one technique in a specific combination, so a variant that shows
+  only one primitive, or uses a different mechanism, is *deliberately* not caught — recall
+  is traded to hold precision against the near-miss twin. The sharpest accepted gaps: a
+  pipe-to-shell from a **named host** (only a raw-IP source fires — the named-host case is
+  sacrificed to keep the `rustup`-style installer quiet), a `/dev/tcp` reverse shell that
+  never spawns an interactive `bash -i`/`sh -i`, an encoded PowerShell launcher with **no**
+  window suppression, and a PHP harvester that exfiltrates through any channel other than
+  `mail()`. These are design choices, not oversights; each rule's `meta`/comments name its
+  lever, and closing a gap means adding the matching malicious **and** benign corpus pair,
+  not loosening the live rule.
 - **Precision lever stated in each rule.** Each rule's `meta` and inline comments name
   the one feature that keeps it off its benign twin.
 - **Value-shaped keys shrink the FP surface, but don't zero it.** Ambiguous credential
