@@ -142,6 +142,8 @@ Deliberately out of the current scope to keep it shippable:
 - Custom `plyara`-based checks beyond yaraQA.
 - Two-path ingestion: one scraped static source + one structured feed.
 - A retro-hunt job running new rules over the stored corpus.
+- A fully-resolved dependency lock (`uv lock` / `pip-compile`): direct deps are
+  `==`-pinned to CI-green versions, but their transitive dependencies still float.
 
 ## What this is not
 

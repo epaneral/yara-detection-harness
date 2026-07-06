@@ -1,6 +1,8 @@
-mcp>=1.2
-httpx>=0.27
-pydantic>=2.0
+# Direct deps ==-pinned to CI-green versions (same reproducibility logic as the
+# ruff pin in CI); transitive deps still float -- a full lock file is on the roadmap.
+mcp==1.28.1
+httpx==0.28.1
+pydantic==2.13.4
 # Optional: lets the server auto-load a local .env during testing.
 # The server also reads a plain VT_API_KEY environment variable without it.
-python-dotenv>=1.0
+python-dotenv==1.2.2
