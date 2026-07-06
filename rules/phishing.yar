@@ -14,9 +14,11 @@ rule Phish_Credential_Exfil_PHP
         reference   = "Credential-harvesting kit: $_POST['password'] -> mail(attacker)"
         date        = "2026-06"
     strings:
-        // $_POST stays case-sensitive: PHP variable/superglobal names are too.
-        $pw_post = "$_POST['password']" ascii
-        $pw_post2 = "$_POST[\"password\"]" ascii
+        // Case-sensitive: PHP superglobal names are. The regex widens past the bare
+        // literal to close trivial evasions: \s* tolerates spaced brackets
+        // ($_POST[ 'password' ]), the alternation catches $_REQUEST/$_GET (both carry
+        // credential input, $_REQUEST aliasing POST), and the class covers either quote.
+        $pw = /\$_(POST|REQUEST|GET)\s*\[\s*['"]password['"]\s*\]/ ascii
         // mail() is nocase: PHP function names are case-insensitive, so a kit
         // using Mail()/MAIL() would otherwise evade this rule. \s* tolerates the
         // legal "mail (" spacing PHP allows between name and paren.
@@ -25,7 +27,7 @@ rule Phish_Credential_Exfil_PHP
         // Capturing a posted password is normal for any login. The exfil primitive
         // (mail() of the captured value) is what separates the kit from a benign
         // same-origin login handler.
-        ($pw_post or $pw_post2) and $mail
+        $pw and $mail
 }
 
 rule Phish_Telegram_Exfil
@@ -43,10 +45,14 @@ rule Phish_Telegram_Exfil
         $send     = "sendMessage" ascii nocase
         $cred1    = "password" ascii nocase
         $cred2    = "passwd" ascii nocase
-        $cred3    = "login" ascii nocase
+        // "login" only in a key:value credential shape (login:, login=, "login":).
+        // The bare word alone over-matches: a sign-in *alert* ("new login from ...")
+        // is benign, and substrings like "blogindex" shouldn't count.
+        $cred3    = /\blogin['"]?\s*[:=]/ nocase ascii
         $cred4    = "cvv" ascii nocase
     condition:
         // Telegram is a legitimate notification channel; the credential context is the
-        // gate. A deploy-status notifier has the API call but no credential keywords.
+        // gate. A deploy-status notifier -- or a login-alert notifier -- has the API
+        // call but no credential keyword in a captured-value shape.
         $tg and $send and any of ($cred*)
 }

