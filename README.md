@@ -128,6 +128,17 @@ Rules are written with YARA's matching engine in mind, not just correctness:
   catch exactly that failure.
 - **Precision lever stated in each rule.** Each rule's `meta` and inline comments name
   the one feature that keeps it off its benign twin.
+- **Value-shaped keys shrink the FP surface, but don't zero it.** Ambiguous credential
+  keywords (`login`, `token`, `pin`, `secret`, …) match only in an exfil *value-shape* —
+  the key directly followed by `:`/`=`, `"key":`, or a URL-encoded delimiter (`%20`/`%3a`/
+  `%3d`) — never as a bare word. That keeps them off benign identifiers: a bot's own
+  `TELEGRAM_BOT_TOKEN`, a `const token = …` assignment (the no-space rule is what excludes
+  it), a "new login from …" alert, or substrings like `className`/`shopping`. The residual
+  it does *not* cover: a benign object literal such as `{token: x}` (property key, no space)
+  still matches the `token:` shape. Nothing in the corpus trips it, but real-world code can —
+  `token` is the most ambiguous keyword in the set. The escape hatch, if it ever bites, is to
+  restrict `token` to `=` and URL-encoded delimiters only, trading away `"token":"…"`
+  JSON-exfil coverage for it.
 - **Comments are content.** YARA scans raw bytes with no notion of language syntax, so a
   rule's atoms match inside a sample's *comments* just like in code. This is deliberate:
   for generated-content scanning, a payload string in a comment is still a payload someone
