@@ -35,8 +35,10 @@ rule PS_Encoded_Hidden_Launcher
         reference   = "powershell -nop -w hidden -enc <base64>"
         date        = "2026-06"
     strings:
-        $enc1   = "-enc" ascii wide nocase
-        $enc2   = "-encodedcommand" ascii wide nocase
+        // Every unambiguous abbreviation of -EncodedCommand, from -en upward. The
+        // trailing \b excludes the benign -Encoding parameter: each of its prefixes
+        // (-enc->o, -enco->d, -encod->i) is followed by a letter, so no word boundary.
+        $enc    = /-en(c(o(d(e(d(c(o(m(m(a(n(d)?)?)?)?)?)?)?)?)?)?)?)?\b/ ascii wide nocase
         $hide1  = "-w hidden" ascii wide nocase
         $hide2  = "-windowstyle hidden" ascii wide nocase
         $hide3  = "hidden" ascii wide nocase
@@ -44,5 +46,5 @@ rule PS_Encoded_Hidden_Launcher
     condition:
         // Encoded payload AND window/profile suppression. A base64 *config* decode
         // (benign) has neither -enc nor a hidden-window flag, so it won't trip.
-        ($enc1 or $enc2) and ($hide1 or $hide2 or ($hide3 and $nop))
+        $enc and ($hide1 or $hide2 or ($hide3 and $nop))
 }

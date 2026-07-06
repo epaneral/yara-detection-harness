@@ -27,21 +27,24 @@ rule Shell_Pipe_To_Shell_From_IP
 {
     meta:
         author      = "Elyse Paneral"
-        description = "Remote script piped straight into a shell, fetched from a raw IP over http"
+        description = "Remote script piped straight into a shell, fetched from a raw IP over http(s)"
         family      = "shell.dropper"
         severity    = "high"
         attack      = "T1105, T1059.004"
-        reference   = "curl http://<ip>/x | bash"
+        reference   = "curl http(s)://<ip>/x | bash"
         date        = "2026-06"
     strings:
-        $ipurl     = /http:\/\/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/ ascii
-        $fetch1    = "curl" ascii
-        $fetch2    = "wget" ascii
-        $pipe_bash = "| bash" ascii
-        $pipe_sh   = "| sh" ascii
+        // known limitation: matches any IPv4, incl. private/loopback (10/8, 192.168/16,
+        // 127/8). Fine for this synthetic corpus; exclude those ranges before live use.
+        $ipurl  = /https?:\/\/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/ ascii
+        $fetch1 = "curl" ascii
+        $fetch2 = "wget" ascii
+        // tolerate any spacing before the shell (| bash, |bash, |  sh); \b keeps it off
+        // benign look-alikes like "| shasum".
+        $pipe   = /\|\s*(bash|sh)\b/ ascii
     condition:
-        // The raw-IP-over-http source is the precision lever: the legitimate
-        // rustup-style installer also pipes to a shell, but does so over https
-        // from a named host, so $ipurl never matches it.
-        $ipurl and ($fetch1 or $fetch2) and ($pipe_bash or $pipe_sh)
+        // The raw-IP source is the precision lever (scheme-agnostic): the legitimate
+        // rustup-style installer also pipes to a shell, but does so from a named host,
+        // so $ipurl never matches it.
+        $ipurl and ($fetch1 or $fetch2) and $pipe
 }
