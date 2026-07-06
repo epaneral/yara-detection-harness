@@ -45,10 +45,12 @@ rule Phish_Telegram_Exfil
         $send     = "sendMessage" ascii nocase
         $cred1    = "password" ascii nocase
         $cred2    = "passwd" ascii nocase
-        // "login" only in a key:value credential shape (login:, login=, "login":).
-        // The bare word alone over-matches: a sign-in *alert* ("new login from ...")
-        // is benign, and substrings like "blogindex" shouldn't count.
-        $cred3    = /\blogin['"]?\s*[:=]/ nocase ascii
+        // "login" as a credential key: a : or = delimiter (login:, login=, "login":)
+        // OR its URL-encoded forms (login%20 / login%3a / login%3d) as seen in
+        // query-string exfil -- widened to catch a bare-separator value in a URL.
+        // Still excludes a sign-in *alert* ("new login from ..."), where "login" is
+        // followed by a literal space + prose rather than a value delimiter.
+        $cred3    = /\blogin['"]?(\s*[:=]|%20|%3[ad])/ nocase ascii
         $cred4    = "cvv" ascii nocase
     condition:
         // Telegram is a legitimate notification channel; the credential context is the
