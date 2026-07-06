@@ -43,18 +43,29 @@ rule Phish_Telegram_Exfil
     strings:
         $tg       = "api.telegram.org/bot" ascii nocase
         $send     = "sendMessage" ascii nocase
+        // Bare high-signal credential words -- rarely innocent substrings, so no
+        // value-shape is needed to keep them off the benign corpus.
         $cred1    = "password" ascii nocase
         $cred2    = "passwd" ascii nocase
-        // "login" as a credential key: a : or = delimiter (login:, login=, "login":)
-        // OR its URL-encoded forms (login%20 / login%3a / login%3d) as seen in
-        // query-string exfil -- widened to catch a bare-separator value in a URL.
-        // Still excludes a sign-in *alert* ("new login from ..."), where "login" is
-        // followed by a literal space + prose rather than a value delimiter.
-        $cred3    = /\blogin['"]?(\s*[:=]|%20|%3[ad])/ nocase ascii
-        $cred4    = "cvv" ascii nocase
+        $cred3    = "cvv" ascii nocase
+        $cred4    = "cvc" ascii nocase
+        // Ambiguous keys -- each is a common benign identifier or substring (a bot's own
+        // TELEGRAM_BOT_TOKEN, a "new login from ..." alert, className / shopping), so each
+        // is required in an exfil value-shape: KEY directly followed by : or = (query-param
+        // or JSON key), or a URL-encoded delimiter (%20 / %3a / %3d). The no-space rule is
+        // deliberate -- it keeps a benign "const token = ..." assignment and a literal-space
+        // "new login to ..." alert from tripping the gate, while still catching key=value
+        // and "key":"value" exfil.
+        $key1     = /\blogin['"]?([:=]|%20|%3[ad])/ nocase ascii
+        $key2     = /\btoken['"]?([:=]|%20|%3[ad])/ nocase ascii
+        $key3     = /\botp['"]?([:=]|%20|%3[ad])/ nocase ascii
+        $key4     = /\bpasscode['"]?([:=]|%20|%3[ad])/ nocase ascii
+        $key5     = /\bpin['"]?([:=]|%20|%3[ad])/ nocase ascii
+        $key6     = /\bsecret['"]?([:=]|%20|%3[ad])/ nocase ascii
+        $key7     = /\bssn['"]?([:=]|%20|%3[ad])/ nocase ascii
     condition:
-        // Telegram is a legitimate notification channel; the credential context is the
-        // gate. A deploy-status notifier -- or a login-alert notifier -- has the API
-        // call but no credential keyword in a captured-value shape.
-        $tg and $send and any of ($cred*)
+        // Telegram is a legitimate notification channel; a captured-credential value is the
+        // gate. A deploy-status, login-alert, or token-rotation notifier has the API call
+        // but no credential in an exfil value-shape.
+        $tg and $send and (any of ($cred*) or any of ($key*))
 }

@@ -55,6 +55,10 @@ samples:
     label: malicious
     expected_rules: [Phish_Telegram_Exfil]
 
+  - path: corpus/malicious/phish_telegram_token_exfil.html
+    label: malicious
+    expected_rules: [Phish_Telegram_Exfil]
+
   # --- benign (near-misses) --------------------------------------------------
   - path: corpus/benign/ps_admin_download.ps1
     label: benign
@@ -110,5 +114,9 @@ samples:
     expected_rules: []
 
   - path: corpus/benign/telegram_login_alert.js
+    label: benign
+    expected_rules: []
+
+  - path: corpus/benign/telegram_token_refresh.js
     label: benign
     expected_rules: []

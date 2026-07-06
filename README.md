@@ -71,6 +71,7 @@ its surface features but not its intent:
 | `$_GET['password']` → `mail(attacker)` | gated-download passphrase check, no outbound mail | the outbound exfil, not the query-string capture |
 | Telegram API carrying creds | Telegram API carrying deploy status | credential context |
 | Telegram API carrying `login:`/`otp:` | Telegram API posting a "new login" sign-in alert | the credential-value shape (`login:`/`login=`/`login%20`…), not the bare word `login` |
+| Telegram API carrying `token=`/`otp=` | Telegram API posting a token-rotation status | credential value-shape, not a benign `token =` assignment |
 
 ## The harness
 
