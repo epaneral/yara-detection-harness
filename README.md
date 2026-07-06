@@ -43,8 +43,12 @@ tests/
   manifest.yml  ground-truth labels + expected matches (single source of truth)
   test_rules.py the harness
 enrichment-mcp/
-  server.py       VirusTotal enrichment MCP server (separate component, own deps)
-  test_server.py  unit tests for its pure logic (validation, encoding, normalize)
+  server.py           VirusTotal enrichment MCP server (separate component, own deps)
+  test_server.py      unit tests for its pure logic (validation, encoding, normalize)
+  test_tools.py       offline tests driving the vt_lookup_* tools, network stubbed
+  smoke_test.py       live stdio smoke test (works with or without a VT key)
+  investigate_demo.py YARA flag -> investigate_sample chain, end to end
+.mcp.json     project-scoped MCP config (Claude Code auto-discovers the server)
 ruff.toml     lint + format configuration for the Python (harness + MCP server)
 .github/workflows/ci.yml   per-component CI (lint / harness / enrichment-mcp) on every push
 ```
@@ -67,7 +71,7 @@ its surface features but not its intent:
 ## The harness
 
 `tests/test_rules.py` is driven entirely by `tests/manifest.yml` — add a sample and
-its label there and it's automatically covered. Three gates:
+its label there and it's automatically covered. Four gates:
 
 1. **Compilation** — every `.yar` file compiles; a broken rule fails the build.
 2. **Recall** — each malicious sample is caught by its expected rule(s).
@@ -75,6 +79,9 @@ its label there and it's automatically covered. Three gates:
    across the benign corpus must stay at or below `FP_THRESHOLD` (held at `0.0` here).
    The threshold is a single constant so the gate is explicit and tunable as the
    corpus grows and a zero-FP bar stops being realistic.
+4. **Manifest/ruleset integrity** — the manifest and rules stay in sync: no orphan rule
+   (defined but exercised by no sample), no `expected_rules` naming a non-existent rule,
+   and every referenced sample path exists.
 
 ```bash
 pip install -r requirements.txt
@@ -116,6 +123,15 @@ Rules are written with YARA's matching engine in mind, not just correctness:
   catch exactly that failure.
 - **Precision lever stated in each rule.** Each rule's `meta` and inline comments name
   the one feature that keeps it off its benign twin.
+- **Comments are content.** YARA scans raw bytes with no notion of language syntax, so a
+  rule's atoms match inside a sample's *comments* just like in code. This is deliberate:
+  for generated-content scanning, a payload string in a comment is still a payload someone
+  can copy-paste, and the workarounds (per-language line-guard regexes, comment-stripping
+  preprocessing) trade a known FP class for silent false negatives. The accepted cost is
+  that documentation quoting attack strings will flag; if that class ever matters, it gets
+  modeled as a benign near-miss pair in the corpus, not a comment-blind rule. Corollary for
+  corpus authoring: sample header comments must describe their near-miss without quoting
+  the rule's atoms — the FP gate enforces this.
 
 ## Roadmap (not built yet — phase 2)
 
