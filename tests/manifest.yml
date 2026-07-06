@@ -60,6 +60,10 @@ samples:
     label: benign
     expected_rules: []
 
+  - path: corpus/benign/port_check_ssh_key.sh
+    label: benign
+    expected_rules: []
+
   - path: corpus/benign/rustup_install.sh
     label: benign
     expected_rules: []

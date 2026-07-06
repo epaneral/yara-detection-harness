@@ -15,11 +15,14 @@ rule Shell_Reverse_TCP_Bash
         date        = "2026-06"
     strings:
         $devtcp = "/dev/tcp/" ascii
-        $bi     = "bash -i" ascii
-        $si     = "sh -i" ascii
+        // fullword: "sh -i" as a substring lives inside "ssh -i <keyfile>" (and
+        // "bash -i" inside "bash -install"), so the atoms must stand alone.
+        $bi     = "bash -i" ascii fullword
+        $si     = "sh -i" ascii fullword
     condition:
         // /dev/tcp socket use is near-exclusively malicious; gating on an interactive
-        // shell keeps it off benign scripts that merely redirect with ">&".
+        // shell keeps it off benign scripts that merely redirect with ">&", and the
+        // fullword atoms keep it off "ssh -i" health checks that also touch /dev/tcp.
         $devtcp and ($bi or $si)
 }
 
