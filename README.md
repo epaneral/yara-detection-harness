@@ -67,7 +67,11 @@ its surface features but not its intent:
 | `bash -i >& /dev/tcp/...` | `/dev/tcp` port-check + `ssh -i <keyfile>` | fullword `sh -i` atom — `ssh -i` contains the substring but not the token |
 | `curl http://<ip> \| bash` | rustup-style `curl https://host \| sh` | raw-IP-over-http source |
 | `$_POST['password']` → `mail(attacker)` | same-origin login handler | the outbound exfil, not the capture |
+| `$_REQUEST[ 'password' ]` → `mail(attacker)` | account-settings update, no outbound mail | the outbound exfil (capture regex tolerates spacing + superglobal swap) |
+| `$_GET['password']` → `mail(attacker)` | gated-download passphrase check, no outbound mail | the outbound exfil, not the query-string capture |
 | Telegram API carrying creds | Telegram API carrying deploy status | credential context |
+| Telegram API carrying `login:`/`otp:` | Telegram API posting a "new login" sign-in alert | the credential-value shape (`login:`/`login=`/`login%20`…), not the bare word `login` |
+| Telegram API carrying `token=`/`otp=` | Telegram API posting a token-rotation status | credential value-shape, not a benign `token =` assignment |
 
 ## The harness
 
@@ -122,8 +126,37 @@ Rules are written with YARA's matching engine in mind, not just correctness:
   (capture **and** exfil, encode **and** hide, fetch **and** pipe-to-shell). Single-
   feature rules are where false positives come from; the near-miss corpus exists to
   catch exactly that failure.
+- **Precision over recall — accepted false negatives.** The flip side of the rule above:
+  each rule is scoped to one technique in a specific combination, so a variant that shows
+  only one primitive, or uses a different mechanism, is *deliberately* not caught — recall
+  is traded to hold precision against the near-miss twin. The sharpest accepted gaps: a
+  pipe-to-shell from a **named host** (only a raw-IP source fires — the named-host case is
+  sacrificed to keep the `rustup`-style installer quiet), a `/dev/tcp` reverse shell that
+  never spawns an interactive `bash -i`/`sh -i`, an encoded PowerShell launcher with **no**
+  window suppression, and a PHP harvester that exfiltrates through any channel other than
+  `mail()`. These are design choices, not oversights; each rule's `meta`/comments name its
+  lever, and closing a gap means adding the matching malicious **and** benign corpus pair,
+  not loosening the live rule. In a mature detection portfolio these gaps aren't holes:
+  recall is a property of the whole stack, not one rule, so each would be backstopped at
+  another layer (EDR process-lineage, network/egress telemetry) and shadowed by a companion
+  **low-precision, higher-FP "hunt"-tier rule** routed to a triage queue rather than an
+  auto-alert or block — recovering recall without loosening the precise rule. This repo has a
+  single static-content layer and one hard `0.0` FP gate, so that tiering isn't wired up; the
+  note above is instead its **risk-acceptance record** — the gaps are logged deliberately,
+  not left implicit.
 - **Precision lever stated in each rule.** Each rule's `meta` and inline comments name
   the one feature that keeps it off its benign twin.
+- **Value-shaped keys shrink the FP surface, but don't zero it.** Ambiguous credential
+  keywords (`login`, `token`, `pin`, `secret`, …) match only in an exfil *value-shape* —
+  the key directly followed by `:`/`=`, `"key":`, or a URL-encoded delimiter (`%20`/`%3a`/
+  `%3d`) — never as a bare word. That keeps them off benign identifiers: a bot's own
+  `TELEGRAM_BOT_TOKEN`, a `const token = …` assignment (the no-space rule is what excludes
+  it), a "new login from …" alert, or substrings like `className`/`shopping`. The residual
+  it does *not* cover: a benign object literal such as `{token: x}` (property key, no space)
+  still matches the `token:` shape. Nothing in the corpus trips it, but real-world code can —
+  `token` is the most ambiguous keyword in the set. The escape hatch, if it ever bites, is to
+  restrict `token` to `=` and URL-encoded delimiters only, trading away `"token":"…"`
+  JSON-exfil coverage for it.
 - **Comments are content.** YARA scans raw bytes with no notion of language syntax, so a
   rule's atoms match inside a sample's *comments* just like in code. This is deliberate:
   for generated-content scanning, a payload string in a comment is still a payload someone

