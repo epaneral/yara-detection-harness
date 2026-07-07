@@ -4,7 +4,8 @@ Corpus-based regression harness for the YARA ruleset.
 Four gates, all driven by tests/manifest.yml:
 
   1. compilation   - every .yar file compiles (a broken rule fails the build)
-  2. recall        - each malicious sample is caught by its expected rule(s)
+  2. recall        - each malicious sample is caught by exactly its expected
+                     rule(s): no missed rule, no cross-fire from another family
   3. false-positive- benign near-misses produce no matches; the aggregate FP
                      rate across the benign corpus must stay <= FP_THRESHOLD
   4. integrity     - the manifest and ruleset stay in sync: no orphan rule
@@ -35,8 +36,9 @@ def load_manifest():
     return data["samples"]
 
 
-def compiled_rules():
-    """Compile every rule file into one namespaced ruleset."""
+@pytest.fixture(scope="session")
+def rules():
+    """Compile every rule file into one namespaced ruleset, once per run."""
     filepaths = {p.stem: str(p) for p in sorted(RULES_DIR.glob("*.yar"))}
     assert filepaths, "no .yar files found under rules/"
     return yara.compile(filepaths=filepaths)
@@ -55,9 +57,9 @@ BENIGN = [s for s in SAMPLES if s["label"] == "benign"]
 EXPECTED_RULES = {name for s in SAMPLES for name in (s.get("expected_rules") or [])}
 
 
-def defined_rules():
+def defined_rules(rules):
     """Identifiers of every rule that actually compiles from rules/."""
-    return {r.identifier for r in compiled_rules()}
+    return {r.identifier for r in rules}
 
 
 # --- Gate 1: compilation ---------------------------------------------------
@@ -68,23 +70,28 @@ def test_rule_file_compiles(rule_file):
 
 # --- Gate 2: recall (true positives) ---------------------------------------
 @pytest.mark.parametrize("sample", MALICIOUS, ids=lambda s: s["path"])
-def test_positive_is_detected(sample):
-    rules = compiled_rules()
+def test_positive_is_detected(sample, rules):
     fired = matches_for(rules, sample["path"])
-    missing = set(sample["expected_rules"]) - set(fired)
+    expected = set(sample["expected_rules"])
+    missing = expected - set(fired)
     assert not missing, f"{sample['path']} missed expected rule(s) {sorted(missing)}; fired={fired}"
+    # Exact match, not subset: a rule cross-firing on another family's sample is
+    # either a precision bug or a multi-match the manifest should declare.
+    unexpected = set(fired) - expected
+    assert not unexpected, (
+        f"{sample['path']} cross-fired unexpected rule(s) {sorted(unexpected)}; "
+        "fix the rule or add it to this sample's expected_rules"
+    )
 
 
 # --- Gate 3: false positives ------------------------------------------------
 @pytest.mark.parametrize("sample", BENIGN, ids=lambda s: s["path"])
-def test_benign_does_not_match(sample):
-    rules = compiled_rules()
+def test_benign_does_not_match(sample, rules):
     fired = matches_for(rules, sample["path"])
     assert not fired, f"FALSE POSITIVE on {sample['path']}: {fired}"
 
 
-def test_aggregate_fp_rate_within_threshold():
-    rules = compiled_rules()
+def test_aggregate_fp_rate_within_threshold(rules):
     tripped = [s["path"] for s in BENIGN if matches_for(rules, s["path"])]
     fp_rate = len(tripped) / len(BENIGN) if BENIGN else 0.0
     assert fp_rate <= FP_THRESHOLD, (
@@ -93,18 +100,18 @@ def test_aggregate_fp_rate_within_threshold():
 
 
 # --- Gate 4: manifest <-> ruleset integrity --------------------------------
-def test_every_defined_rule_is_covered():
+def test_every_defined_rule_is_covered(rules):
     """No rule ships without a malicious sample exercising it."""
-    orphans = defined_rules() - EXPECTED_RULES
+    orphans = defined_rules(rules) - EXPECTED_RULES
     assert not orphans, (
         f"orphan rule(s) not exercised by any sample: {sorted(orphans)}; "
         "add a malicious sample to tests/manifest.yml that expects each"
     )
 
 
-def test_expected_rules_reference_real_rules():
+def test_expected_rules_reference_real_rules(rules):
     """Every name in the manifest's expected_rules resolves to a compiled rule."""
-    unknown = EXPECTED_RULES - defined_rules()
+    unknown = EXPECTED_RULES - defined_rules(rules)
     assert not unknown, f"manifest names unknown rule(s) (typo or removed rule?): {sorted(unknown)}"
 
 
