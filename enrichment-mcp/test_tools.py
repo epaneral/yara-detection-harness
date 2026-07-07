@@ -214,6 +214,32 @@ def test_investigate_sample_caps_indicators(monkeypatch):
     assert len(out["skipped"]) == 1
 
 
+def test_investigate_sample_honors_delay(monkeypatch):
+    monkeypatch.setattr(server, "VT_API_KEY", "test-key-not-real")
+
+    async def _any(path):
+        return {"data": {"id": "X", "attributes": {"last_analysis_stats": {"malicious": 0}}}}
+
+    monkeypatch.setattr(server, "_vt_get", _any)
+
+    sleeps = []
+
+    async def _fake_sleep(seconds):
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(server.asyncio, "sleep", _fake_sleep)
+
+    text = "http://192.0.2.1/a http://192.0.2.2/b http://192.0.2.3/c"
+
+    out = _verdict(server.investigate_sample(server.InvestigateInput(text=text)))
+    assert sleeps == []  # default delay_seconds=0: no pacing
+    assert "no pacing delay" in out["note"]
+
+    out = _verdict(server.investigate_sample(server.InvestigateInput(text=text, delay_seconds=15)))
+    assert sleeps == [15.0, 15.0]  # between lookups only: n-1 sleeps for n lookups
+    assert "paced 15s apart" in out["note"]
+
+
 def test_investigate_sample_missing_key(monkeypatch):
     monkeypatch.setattr(server, "VT_API_KEY", "")
     out = asyncio.run(server.investigate_sample(server.InvestigateInput(text="http://192.0.2.1/a")))

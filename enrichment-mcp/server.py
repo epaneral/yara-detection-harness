@@ -20,6 +20,7 @@ Scope fence (deliberately NOT built here): multi-source fan-out,
 caching/persistence, and a formal eval suite. See README.md "Roadmap" for those.
 """
 
+import asyncio
 import base64
 import ipaddress
 import json
@@ -181,6 +182,12 @@ class InvestigateInput(BaseModel):
         description="Max indicators to look up (the rest are reported as skipped)",
         ge=1,
         le=25,
+    )
+    delay_seconds: float = Field(
+        0.0,
+        description="Pause between successive lookups; ~15 stays under the VT free-tier ~4/min",
+        ge=0.0,
+        le=60.0,
     )
 
 
@@ -544,14 +551,18 @@ async def investigate_sample(params: InvestigateInput) -> str:
     """Extract indicators from sample text and chain a VirusTotal lookup for each.
 
     The chained capability behind the "auto-extract + chain" roadmap item: hand it a
-    flagged sample's text and it extracts the indicators, looks each up (sequentially,
-    to respect the free-tier rate limit), and returns one aggregated report. A single
-    indicator's 404/429/error becomes that row's "error" without sinking the rest.
+    flagged sample's text and it extracts the indicators, looks each up sequentially
+    (for stable ordering and output), and returns one aggregated report. Lookups are
+    unpaced by default; on the free tier (~4/min) that can surface as per-row 429
+    errors -- set delay_seconds to pace them. A single indicator's 404/429/error
+    becomes that row's "error" without sinking the rest.
 
     Args:
         params (InvestigateInput): Validated input containing:
             - text (str): the sample text.
             - max_indicators (int): cap on lookups (default 10, max 25).
+            - delay_seconds (float): pause between successive lookups (default 0,
+              max 60); ~15 stays under the free-tier rate limit.
 
     Returns:
         str: JSON with a "summary" tally, per-indicator "results" (each carrying a
@@ -568,7 +579,9 @@ async def investigate_sample(params: InvestigateInput) -> str:
 
     tally = {"malicious": 0, "suspicious": 0, "clean_or_unknown": 0, "not_found": 0, "errors": 0}
     results = []
-    for ind in looked:
+    for i, ind in enumerate(looked):
+        if i and params.delay_seconds:
+            await asyncio.sleep(params.delay_seconds)
         raw = await _dispatch_lookup(ind)
         row = {"indicator": ind["indicator"], "type": ind["type"]}
         try:
@@ -596,8 +609,13 @@ async def investigate_sample(params: InvestigateInput) -> str:
         "results": results,
         "skipped": skipped,
         "note": (
-            f"Looked up {len(looked)} of {len(indicators)} indicators sequentially; "
-            "VT free tier is ~4/min, 500/day."
+            f"Looked up {len(looked)} of {len(indicators)} indicators sequentially, "
+            + (
+                f"paced {params.delay_seconds:g}s apart"
+                if params.delay_seconds
+                else "with no pacing delay (set delay_seconds to pace)"
+            )
+            + "; VT free tier is ~4/min, 500/day."
         ),
     }
     return json.dumps(report, indent=2)
