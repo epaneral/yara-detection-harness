@@ -136,7 +136,14 @@ Rules are written with YARA's matching engine in mind, not just correctness:
   window suppression, and a PHP harvester that exfiltrates through any channel other than
   `mail()`. These are design choices, not oversights; each rule's `meta`/comments name its
   lever, and closing a gap means adding the matching malicious **and** benign corpus pair,
-  not loosening the live rule.
+  not loosening the live rule. In a mature detection portfolio these gaps aren't holes:
+  recall is a property of the whole stack, not one rule, so each would be backstopped at
+  another layer (EDR process-lineage, network/egress telemetry) and shadowed by a companion
+  **low-precision, higher-FP "hunt"-tier rule** routed to a triage queue rather than an
+  auto-alert or block — recovering recall without loosening the precise rule. This repo has a
+  single static-content layer and one hard `0.0` FP gate, so that tiering isn't wired up; the
+  note above is instead its **risk-acceptance record** — the gaps are logged deliberately,
+  not left implicit.
 - **Precision lever stated in each rule.** Each rule's `meta` and inline comments name
   the one feature that keeps it off its benign twin.
 - **Value-shaped keys shrink the FP surface, but don't zero it.** Ambiguous credential
