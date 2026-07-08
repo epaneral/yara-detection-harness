@@ -15,6 +15,9 @@ Design notes:
     reputation sources could slot in behind the same normalized verdict shape.
   - API key is read from the VT_API_KEY environment variable, never hardcoded.
   - Local stdio transport: launched as a subprocess by an MCP client.
+  - One pooled HTTP client is reused across lookups (closed on shutdown), and a
+    transient 429/5xx is retried with bounded backoff before it degrades to the
+    usual one-line error.
 
 Scope fence (deliberately NOT built here): multi-source fan-out,
 caching/persistence, and a formal eval suite. See README.md "Roadmap" for those.
@@ -26,6 +29,7 @@ import ipaddress
 import json
 import os
 import re
+from contextlib import asynccontextmanager
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -47,6 +51,17 @@ VT_API_BASE = "https://www.virustotal.com/api/v3"
 VT_API_KEY = os.environ.get("VT_API_KEY", "")
 REQUEST_TIMEOUT = 30.0  # seconds
 
+# Retry policy for *transient* failures only (429 rate-limit and 5xx). Bounded
+# so a persistently failing endpoint still returns an actionable one-line
+# message rather than hanging: at most MAX_RETRIES extra attempts, each preceded
+# by a wait that honors a Retry-After header when present, else grows
+# exponentially (BACKOFF_BASE_SECONDS * 2**attempt) up to BACKOFF_MAX_SECONDS.
+MAX_RETRIES = 3
+RETRY_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+BACKOFF_BASE_SECONDS = 0.5
+BACKOFF_MAX_SECONDS = 8.0
+RETRY_AFTER_MAX_SECONDS = 60.0  # cap an honored Retry-After so a huge value can't stall us
+
 # Indicator-extraction patterns. Domains are taken from URL hosts and email
 # addresses only; standalone bare-domain scanning is skipped because dotted code
 # identifiers (e.g. System.Net.WebClient) are indistinguishable from domains
@@ -67,7 +82,42 @@ _DOMAIN_RE = re.compile(
 )
 _URL_TRAILING_PUNCT = ".,;:!?)\"']}>"
 
-mcp = FastMCP("virustotal_mcp")
+
+# --- Shared HTTP client ----------------------------------------------------
+# One pooled AsyncClient is reused across every lookup instead of standing up a
+# fresh connection pool per request. Created lazily on first use (so importing
+# the module -- and the offline tests, which stub _vt_get -- never opens a real
+# client or socket) and closed on server shutdown by the lifespan hook below.
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    """Return the shared AsyncClient, creating it on first use."""
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT)
+    return _client
+
+
+async def _close_client() -> None:
+    """Close and drop the shared client (idempotent). Called on shutdown."""
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
+
+
+@asynccontextmanager
+async def _lifespan(_server: FastMCP):
+    """Own the shared client's lifecycle: nothing to set up (it's created lazily
+    on the first lookup), but close it on shutdown so the pool doesn't leak."""
+    try:
+        yield
+    finally:
+        await _close_client()
+
+
+mcp = FastMCP("virustotal_mcp", lifespan=_lifespan)
 
 
 # --- Input models ----------------------------------------------------------
@@ -220,13 +270,40 @@ def _url_id(url: str) -> str:
     return base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
 
 
+def _retry_delay(resp: httpx.Response, attempt: int) -> float:
+    """Seconds to wait before the next retry.
+
+    Honors a numeric Retry-After header (capped, so a hostile/huge value can't
+    stall us); the HTTP-date form is not parsed and falls through to bounded
+    exponential backoff (BACKOFF_BASE_SECONDS * 2**attempt, capped).
+    """
+    retry_after = resp.headers.get("Retry-After")
+    if retry_after:
+        try:
+            secs = float(retry_after)
+        except ValueError:
+            pass  # HTTP-date form -- fall through to backoff
+        else:
+            return max(0.0, min(secs, RETRY_AFTER_MAX_SECONDS))
+    return min(BACKOFF_BASE_SECONDS * (2**attempt), BACKOFF_MAX_SECONDS)
+
+
 async def _vt_get(path: str) -> dict:
-    """GET {VT_API_BASE}/{path} with auth. Lets httpx errors propagate to the caller."""
-    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-        resp = await client.get(
-            f"{VT_API_BASE}/{path}",
-            headers={"x-apikey": VT_API_KEY},
-        )
+    """GET {VT_API_BASE}/{path} with auth, via the shared client.
+
+    A 429 or transient 5xx is retried up to MAX_RETRIES times (waiting per
+    _retry_delay between attempts); once retries are exhausted the final
+    response's status raises, and every other error propagates immediately, so
+    the caller maps it to a one-line message via _handle_error.
+    """
+    client = _get_client()
+    url = f"{VT_API_BASE}/{path}"
+    headers = {"x-apikey": VT_API_KEY}
+    for attempt in range(MAX_RETRIES + 1):
+        resp = await client.get(url, headers=headers)
+        if resp.status_code in RETRY_STATUS_CODES and attempt < MAX_RETRIES:
+            await asyncio.sleep(_retry_delay(resp, attempt))
+            continue
         resp.raise_for_status()
         return resp.json()
 

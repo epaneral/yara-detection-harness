@@ -227,6 +227,12 @@ Every failure mode returns a single actionable line, never a stack trace:
 | Indicator unknown (404) | `Not found: '<indicator>' is not in VirusTotal's dataset ...` |
 | Timeout / network error | `Error: request to VirusTotal timed out ...` / `network error ...` |
 
+A transient **429 or 5xx is retried first** — honoring a `Retry-After` header when
+present, otherwise bounded exponential backoff, capped at a few attempts — and only
+degrades to the one-line message above once retries are exhausted. Lookups share a
+single pooled HTTP client (closed on server shutdown) rather than opening a fresh
+connection per call.
+
 ## Security notes
 
 - **Key in env, never in code or git.** `.env` is gitignored; `.env.example` is a
