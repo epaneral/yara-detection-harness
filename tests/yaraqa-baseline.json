@@ -1,0 +1,341 @@
+[
+    {
+        "rule": "Phish_Telegram_Exfil",
+        "id": "HS3",
+        "issue": "The rule contains a high number of regex strings.",
+        "element": "Number of regex strings 7",
+        "level": 1,
+        "type": "resources",
+        "recommendation": "Try to reduce the number of regex strings. Usually rules don't require such a high number of regex strings to be effective. I know it's hard, but try to write a rule that uses less regex strings. In >90%% of the cases it's possible to write a rule without regex strings."
+    },
+    {
+        "rule": "Phish_Telegram_Exfil",
+        "id": "NC1",
+        "issue": "The string uses the 'nocase' modifier and does not contain any special characters or digits.",
+        "element": {
+            "name": "$send",
+            "value": "sendMessage",
+            "type": "text",
+            "modifiers": [
+                "ascii",
+                "nocase"
+            ]
+        },
+        "level": 1,
+        "type": "performance",
+        "recommendation": "By adding a single character that is not a letter (e.g. space, digit) you can improve the performance of the string significantly."
+    },
+    {
+        "rule": "Phish_Telegram_Exfil",
+        "id": "NC1",
+        "issue": "The string uses the 'nocase' modifier and does not contain any special characters or digits.",
+        "element": {
+            "name": "$cred1",
+            "value": "password",
+            "type": "text",
+            "modifiers": [
+                "ascii",
+                "nocase"
+            ]
+        },
+        "level": 1,
+        "type": "performance",
+        "recommendation": "By adding a single character that is not a letter (e.g. space, digit) you can improve the performance of the string significantly."
+    },
+    {
+        "rule": "Phish_Telegram_Exfil",
+        "id": "NC1",
+        "issue": "The string uses the 'nocase' modifier and does not contain any special characters or digits.",
+        "element": {
+            "name": "$cred2",
+            "value": "passwd",
+            "type": "text",
+            "modifiers": [
+                "ascii",
+                "nocase"
+            ]
+        },
+        "level": 1,
+        "type": "performance",
+        "recommendation": "By adding a single character that is not a letter (e.g. space, digit) you can improve the performance of the string significantly."
+    },
+    {
+        "rule": "Phish_Telegram_Exfil",
+        "id": "PA2",
+        "issue": "The rule contains a string that turns out to be a very short atom, which could cause a reduced performance of the complete rule set or increased memory usage.",
+        "element": {
+            "name": "$cred3",
+            "value": "cvv",
+            "type": "text",
+            "modifiers": [
+                "ascii",
+                "nocase"
+            ]
+        },
+        "level": 2,
+        "type": "performance",
+        "recommendation": "Try to avoid using such short atoms, by e.g. adding a few more bytes to the beginning or the end (e.g. add a binary 0 in front or a space after the string). Every additional byte helps."
+    },
+    {
+        "rule": "Phish_Telegram_Exfil",
+        "id": "PA2",
+        "issue": "The rule contains a string that turns out to be a very short atom, which could cause a reduced performance of the complete rule set or increased memory usage.",
+        "element": {
+            "name": "$cred4",
+            "value": "cvc",
+            "type": "text",
+            "modifiers": [
+                "ascii",
+                "nocase"
+            ]
+        },
+        "level": 2,
+        "type": "performance",
+        "recommendation": "Try to avoid using such short atoms, by e.g. adding a few more bytes to the beginning or the end (e.g. add a binary 0 in front or a space after the string). Every additional byte helps."
+    },
+    {
+        "rule": "PS_Download_Cradle_IEX",
+        "id": "NO1",
+        "issue": "The string uses 'ascii', 'wide' and 'nocase' modifier. Are you sure you know what you're doing.",
+        "element": {
+            "name": "$iex1",
+            "value": "IEX",
+            "type": "text",
+            "modifiers": [
+                "fullword",
+                "ascii",
+                "wide",
+                "nocase"
+            ]
+        },
+        "level": 1,
+        "type": "performance",
+        "recommendation": "Limit the modifiers to what you actually find in the samples."
+    },
+    {
+        "rule": "PS_Download_Cradle_IEX",
+        "id": "PA2",
+        "issue": "The rule contains a string that turns out to be a very short atom, which could cause a reduced performance of the complete rule set or increased memory usage.",
+        "element": {
+            "name": "$iex1",
+            "value": "IEX",
+            "type": "text",
+            "modifiers": [
+                "fullword",
+                "ascii",
+                "wide",
+                "nocase"
+            ]
+        },
+        "level": 2,
+        "type": "performance",
+        "recommendation": "Try to avoid using such short atoms, by e.g. adding a few more bytes to the beginning or the end (e.g. add a binary 0 in front or a space after the string). Every additional byte helps."
+    },
+    {
+        "rule": "PS_Download_Cradle_IEX",
+        "id": "NO1",
+        "issue": "The string uses 'ascii', 'wide' and 'nocase' modifier. Are you sure you know what you're doing.",
+        "element": {
+            "name": "$iex2",
+            "value": "Invoke-Expression",
+            "type": "text",
+            "modifiers": [
+                "ascii",
+                "wide",
+                "nocase"
+            ]
+        },
+        "level": 1,
+        "type": "performance",
+        "recommendation": "Limit the modifiers to what you actually find in the samples."
+    },
+    {
+        "rule": "PS_Download_Cradle_IEX",
+        "id": "NO1",
+        "issue": "The string uses 'ascii', 'wide' and 'nocase' modifier. Are you sure you know what you're doing.",
+        "element": {
+            "name": "$dl1",
+            "value": "DownloadString",
+            "type": "text",
+            "modifiers": [
+                "ascii",
+                "wide",
+                "nocase"
+            ]
+        },
+        "level": 1,
+        "type": "performance",
+        "recommendation": "Limit the modifiers to what you actually find in the samples."
+    },
+    {
+        "rule": "PS_Download_Cradle_IEX",
+        "id": "NC1",
+        "issue": "The string uses the 'nocase' modifier and does not contain any special characters or digits.",
+        "element": {
+            "name": "$dl1",
+            "value": "DownloadString",
+            "type": "text",
+            "modifiers": [
+                "ascii",
+                "wide",
+                "nocase"
+            ]
+        },
+        "level": 1,
+        "type": "performance",
+        "recommendation": "By adding a single character that is not a letter (e.g. space, digit) you can improve the performance of the string significantly."
+    },
+    {
+        "rule": "PS_Download_Cradle_IEX",
+        "id": "NO1",
+        "issue": "The string uses 'ascii', 'wide' and 'nocase' modifier. Are you sure you know what you're doing.",
+        "element": {
+            "name": "$dl2",
+            "value": "DownloadData",
+            "type": "text",
+            "modifiers": [
+                "ascii",
+                "wide",
+                "nocase"
+            ]
+        },
+        "level": 1,
+        "type": "performance",
+        "recommendation": "Limit the modifiers to what you actually find in the samples."
+    },
+    {
+        "rule": "PS_Download_Cradle_IEX",
+        "id": "NC1",
+        "issue": "The string uses the 'nocase' modifier and does not contain any special characters or digits.",
+        "element": {
+            "name": "$dl2",
+            "value": "DownloadData",
+            "type": "text",
+            "modifiers": [
+                "ascii",
+                "wide",
+                "nocase"
+            ]
+        },
+        "level": 1,
+        "type": "performance",
+        "recommendation": "By adding a single character that is not a letter (e.g. space, digit) you can improve the performance of the string significantly."
+    },
+    {
+        "rule": "PS_Encoded_Hidden_Launcher",
+        "id": "NO1",
+        "issue": "The string uses 'ascii', 'wide' and 'nocase' modifier. Are you sure you know what you're doing.",
+        "element": {
+            "name": "$enc",
+            "value": "/-en(c(o(d(e(d(c(o(m(m(a(n(d)?)?)?)?)?)?)?)?)?)?)?)?\\b/",
+            "type": "regex",
+            "modifiers": [
+                "ascii",
+                "wide",
+                "nocase"
+            ]
+        },
+        "level": 1,
+        "type": "performance",
+        "recommendation": "Limit the modifiers to what you actually find in the samples."
+    },
+    {
+        "rule": "PS_Encoded_Hidden_Launcher",
+        "id": "RE1",
+        "issue": "The rule contains a regular expression that doesn't use anchors with at least 4 bytes, which could lead to a reduced performance of the complete rule set or increased memory usage.",
+        "element": "/-en(c(o(d(e(d(c(o(m(m(a(n(d)?)?)?)?)?)?)?)?)?)?)?)?\\b/",
+        "level": 2,
+        "type": "performance",
+        "recommendation": "Add longer anchors or try to write it as a string with at least 4 bytes. (add a line break, binary zero or space at the beginning, if possible)"
+    },
+    {
+        "rule": "PS_Encoded_Hidden_Launcher",
+        "id": "NO1",
+        "issue": "The string uses 'ascii', 'wide' and 'nocase' modifier. Are you sure you know what you're doing.",
+        "element": {
+            "name": "$hide1",
+            "value": "-w hidden",
+            "type": "text",
+            "modifiers": [
+                "ascii",
+                "wide",
+                "nocase"
+            ]
+        },
+        "level": 1,
+        "type": "performance",
+        "recommendation": "Limit the modifiers to what you actually find in the samples."
+    },
+    {
+        "rule": "PS_Encoded_Hidden_Launcher",
+        "id": "NO1",
+        "issue": "The string uses 'ascii', 'wide' and 'nocase' modifier. Are you sure you know what you're doing.",
+        "element": {
+            "name": "$hide2",
+            "value": "-windowstyle hidden",
+            "type": "text",
+            "modifiers": [
+                "ascii",
+                "wide",
+                "nocase"
+            ]
+        },
+        "level": 1,
+        "type": "performance",
+        "recommendation": "Limit the modifiers to what you actually find in the samples."
+    },
+    {
+        "rule": "PS_Encoded_Hidden_Launcher",
+        "id": "NO1",
+        "issue": "The string uses 'ascii', 'wide' and 'nocase' modifier. Are you sure you know what you're doing.",
+        "element": {
+            "name": "$hide3",
+            "value": "hidden",
+            "type": "text",
+            "modifiers": [
+                "ascii",
+                "wide",
+                "nocase"
+            ]
+        },
+        "level": 1,
+        "type": "performance",
+        "recommendation": "Limit the modifiers to what you actually find in the samples."
+    },
+    {
+        "rule": "PS_Encoded_Hidden_Launcher",
+        "id": "NC1",
+        "issue": "The string uses the 'nocase' modifier and does not contain any special characters or digits.",
+        "element": {
+            "name": "$hide3",
+            "value": "hidden",
+            "type": "text",
+            "modifiers": [
+                "ascii",
+                "wide",
+                "nocase"
+            ]
+        },
+        "level": 1,
+        "type": "performance",
+        "recommendation": "By adding a single character that is not a letter (e.g. space, digit) you can improve the performance of the string significantly."
+    },
+    {
+        "rule": "PS_Encoded_Hidden_Launcher",
+        "id": "NO1",
+        "issue": "The string uses 'ascii', 'wide' and 'nocase' modifier. Are you sure you know what you're doing.",
+        "element": {
+            "name": "$nop",
+            "value": "-nop",
+            "type": "text",
+            "modifiers": [
+                "ascii",
+                "wide",
+                "nocase"
+            ]
+        },
+        "level": 1,
+        "type": "performance",
+        "recommendation": "Limit the modifiers to what you actually find in the samples."
+    }
+]
