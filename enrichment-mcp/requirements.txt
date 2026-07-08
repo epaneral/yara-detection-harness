@@ -1,5 +1,7 @@
-# Direct deps ==-pinned to CI-green versions (same reproducibility logic as the
-# ruff pin in CI); transitive deps still float -- a full lock file is on the roadmap.
+# Editable declaration of this server's direct runtime deps, ==-pinned to
+# CI-green versions (same reproducibility logic as the ruff pin in CI). These
+# resolve, together with the test runner, into the fully-resolved
+# requirements-dev.lock (every transitive dep pinned and hashed) that CI installs.
 mcp==1.28.1
 httpx==0.28.1
 pydantic==2.13.4

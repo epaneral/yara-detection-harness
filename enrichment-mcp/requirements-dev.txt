@@ -1,4 +1,8 @@
 # Dev/test dependencies for the enrichment MCP server: the runtime deps plus
 # the test runner. Runtime requirements.txt stays free of test-only packages.
+# The fully-resolved lock (this whole closure, every transitive dep pinned and
+# hashed) is requirements-dev.lock, which is what CI installs. Regenerate it
+# after any edit here or in requirements.txt with:
+#   uv pip compile requirements-dev.txt -o requirements-dev.lock --universal --generate-hashes
 -r requirements.txt
 pytest==9.1.1
