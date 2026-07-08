@@ -79,7 +79,8 @@ its surface features but not its intent:
 its label there and it's automatically covered. Four gates:
 
 1. **Compilation** — every `.yar` file compiles; a broken rule fails the build.
-2. **Recall** — each malicious sample is caught by its expected rule(s).
+2. **Recall** — each malicious sample is caught by **exactly** its expected rule(s):
+   no missed rule, no cross-fire from another family.
 3. **False positives** — benign samples produce no matches, and the aggregate FP rate
    across the benign corpus must stay at or below `FP_THRESHOLD` (held at `0.0` here).
    The threshold is a single constant so the gate is explicit and tunable as the
