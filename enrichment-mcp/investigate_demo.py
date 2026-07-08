@@ -27,6 +27,9 @@ REPO = HERE.parent
 SERVER = str(HERE / "server.py")
 RULES_DIR = REPO / "rules"
 CORPUS_DIR = REPO / "corpus"
+# Paces the chained lookups for the VT free tier (~4/min); ~15 stays under it.
+# Keyless calls short-circuit before the pacing loop, so this costs nothing without a key.
+DELAY_SECONDS = 15.0
 
 
 def _flagged_samples():
@@ -55,7 +58,8 @@ async def main():
                 rel = sample.relative_to(REPO).as_posix()
                 print(f"=== {rel}  (flagged by: {', '.join(rule_names)}) ===")
                 result = await session.call_tool(
-                    "investigate_sample", {"params": {"text": sample.read_text()}}
+                    "investigate_sample",
+                    {"params": {"text": sample.read_text(), "delay_seconds": DELAY_SECONDS}},
                 )
                 for block in result.content:
                     print(getattr(block, "text", block))
