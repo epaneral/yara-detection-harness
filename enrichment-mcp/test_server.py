@@ -57,8 +57,19 @@ def test_url_input_accepts_valid():
     assert server.UrlLookupInput(url=url).url == url
 
 
+def test_url_input_accepts_https():
+    url = "https://192.0.2.10/stage2.ps1"
+    assert server.UrlLookupInput(url=url).url == url
+
+
 @pytest.mark.parametrize("bad", ["abc", "http://" + "a" * 2048])
 def test_url_input_rejects_out_of_bounds(bad):
+    with pytest.raises(ValidationError):
+        server.UrlLookupInput(url=bad)
+
+
+@pytest.mark.parametrize("bad", ["ftp://example.com/payload", "www.example.com/path"])
+def test_url_input_rejects_missing_scheme(bad):
     with pytest.raises(ValidationError):
         server.UrlLookupInput(url=bad)
 
@@ -279,3 +290,18 @@ def test_extract_case_insensitive_url_dedup():
     inds = server._extract_indicators("HTTP://192.0.2.1/A\nhttp://192.0.2.1/A")
     assert len(inds) == 1
     assert inds[0]["type"] == "url"
+
+
+def test_extract_url_stops_at_prose_paren():
+    # Prose-wrapped URL -- extraction must stop at the closing ")".
+    assert server._extract_indicators("(see http://192.0.2.9/a)") == [
+        {"indicator": "http://192.0.2.9/a", "type": "url"}
+    ]
+
+
+def test_extract_url_truncates_at_path_bracket():
+    # A literal "]" in a path ends the match early -- the documented accepted cost
+    # of excluding closing brackets so prose/code-wrapped URLs terminate cleanly.
+    assert server._extract_indicators("http://192.0.2.9/items[0] rest") == [
+        {"indicator": "http://192.0.2.9/items[0", "type": "url"}
+    ]

