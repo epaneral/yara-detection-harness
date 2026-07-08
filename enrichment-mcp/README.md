@@ -21,7 +21,7 @@ more reputation sources could slot in behind the same normalized verdict.
 | `vt_lookup_ip_address` | `ip` (IPv4) | normalized verdict |
 | `vt_lookup_domain` | `domain` | normalized verdict |
 | `extract_indicators` | `text` | URLs / IPs / domains in the text (no network) |
-| `investigate_sample` | `text`, `max_indicators` | extract + chain a lookup per indicator → aggregated report |
+| `investigate_sample` | `text`, `max_indicators`, `delay_seconds` | extract + chain a lookup per indicator → aggregated report |
 
 The four `vt_lookup_*` tools return the **same normalized shape** — the answer, not
 VirusTotal's raw 500-field blob:
@@ -47,7 +47,8 @@ modified, or deleted), and `extract_indicators` makes no network call at all.
 
 `investigate_sample` is the "auto-extract + chain" step after a YARA rule fires: hand
 it a flagged sample's **text** and it extracts the indicators (same logic as
-`extract_indicators`), looks each up sequentially (to respect the free-tier rate limit),
+`extract_indicators`), looks each up sequentially (unpaced by default — set
+`delay_seconds` to pace for the free-tier rate limit; ~15 stays under ~4/min),
 and returns one aggregated report:
 
 ```json
@@ -60,7 +61,7 @@ and returns one aggregated report:
     {"indicator": "192.0.2.44", "type": "ip_address", "error": "Not found: ..."}
   ],
   "skipped": [],
-  "note": "Looked up 2 of 2 indicators sequentially; VT free tier is ~4/min, 500/day."
+  "note": "Looked up 2 of 2 indicators sequentially, with no pacing delay (set delay_seconds to pace); VT free tier is ~4/min, 500/day."
 }
 ```
 
