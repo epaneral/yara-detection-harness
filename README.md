@@ -115,6 +115,20 @@ pip install -r enrichment-mcp/requirements-dev.txt
 pytest enrichment-mcp -v
 ```
 
+The same reproducibility logic extends past the direct pins to the whole tree. CI
+installs from fully-resolved lock files — `requirements.lock` for the harness and
+`enrichment-mcp/requirements-dev.lock` for the MCP server — that pin *and hash* every
+transitive dependency, not just the direct ones the `requirements.txt` files declare.
+The locks are compiled with [`uv`](https://docs.astral.sh/uv/)
+(`uv pip compile <src> -o <lock> --universal --generate-hashes`); the header of each
+lock records the exact command to regenerate it. uv over `pip-compile` here because it
+is one fast static binary, `--universal` resolves a single lock valid on both the Linux
+CI runner and Windows/macOS dev machines, and the output is plain hashed requirements
+that vanilla `pip` installs — no extra tool in CI. The hashes put pip in
+`--require-hashes` mode, so an install fails closed rather than drifting to an altered
+or newly-floated dependency. The `requirements.txt` files stay the hand-edited direct-pin
+sources; recompile the matching lock whenever you change one.
+
 ## Rule design notes
 
 Rules are written with YARA's matching engine in mind, not just correctness:
@@ -176,8 +190,6 @@ Deliberately out of the current scope to keep it shippable:
 - Custom `plyara`-based checks beyond yaraQA.
 - Two-path ingestion: one scraped static source + one structured feed.
 - A retro-hunt job running new rules over the stored corpus.
-- A fully-resolved dependency lock (`uv lock` / `pip-compile`): direct deps are
-  `==`-pinned to CI-green versions, but their transitive dependencies still float.
 
 ## What this is not
 

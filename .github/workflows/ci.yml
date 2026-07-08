@@ -41,8 +41,15 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: requirements.txt
-      - run: pip install -r requirements.txt
+          # Install from the fully-resolved lock (every transitive dep pinned +
+          # hashed), so key the cache on it: regenerating the lock invalidates
+          # the cache; editing the requirements.txt source without recompiling
+          # doesn't (and shouldn't -- the lock is what gets installed).
+          cache-dependency-path: requirements.lock
+      # Hashes in the lock put pip in --require-hashes mode automatically, so a
+      # tampered or unpinned transitive dep fails the install rather than silently
+      # resolving to something new.
+      - run: pip install -r requirements.lock
       - run: pytest -v
 
   # Enrichment MCP server: unit tests over its pure logic. Importing the module
@@ -55,9 +62,11 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          # Glob catches requirements.txt too (requirements-dev.txt pulls it in via -r).
-          cache-dependency-path: enrichment-mcp/requirements*.txt
-      - run: pip install -r enrichment-mcp/requirements-dev.txt
+          # The dev lock is the single fully-resolved input to this install
+          # (runtime + test deps, all transitive pins + hashes), so the cache
+          # key hashes it alone.
+          cache-dependency-path: enrichment-mcp/requirements-dev.lock
+      - run: pip install -r enrichment-mcp/requirements-dev.lock
       - run: pytest enrichment-mcp -v
 
   # Single aggregate gate. Branch protection requires only this check, so jobs

@@ -19,6 +19,12 @@ ruff format --check . && ruff check .               # format + lint gates (pinne
 pip install -r enrichment-mcp/requirements-dev.txt && pytest enrichment-mcp -v   # MCP server
 ```
 
+The `requirements.txt` files are the hand-edited direct-pin sources (fine for local
+installs). CI instead installs from fully-resolved, hashed lock files — `requirements.lock`
+and `enrichment-mcp/requirements-dev.lock` — so transitive deps don't float. Regenerate the
+matching lock after editing a pin (command is in each lock's header):
+`uv pip compile <src> -o <lock> --universal --generate-hashes`.
+
 CI = `lint` + `harness` + `enrichment-mcp` jobs, plus an `all-green` aggregate that branch
 protection requires; a skipped needed job fails it on purpose.
 
