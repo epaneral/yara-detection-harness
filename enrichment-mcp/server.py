@@ -18,9 +18,12 @@ Design notes:
   - One pooled HTTP client is reused across lookups (closed on shutdown), and a
     transient 429/5xx is retried with bounded backoff before it degrades to the
     usual one-line error.
+  - Successful lookups are served through a small in-process TTL cache, so
+    repeated indicators (including across an investigate_sample run) do not
+    re-hit VirusTotal.
 
-Scope fence (deliberately NOT built here): multi-source fan-out,
-caching/persistence, and a formal eval suite. See README.md "Roadmap" for those.
+Scope fence (deliberately NOT built here): multi-source fan-out, durable cache
+persistence, and a formal eval suite. See README.md "Roadmap" for those.
 """
 
 import asyncio
@@ -29,6 +32,8 @@ import ipaddress
 import json
 import os
 import re
+import time
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 
 import httpx
@@ -61,6 +66,15 @@ RETRY_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 BACKOFF_BASE_SECONDS = 0.5
 BACKOFF_MAX_SECONDS = 8.0
 RETRY_AFTER_MAX_SECONDS = 60.0  # cap an honored Retry-After so a huge value can't stall us
+
+# In-process read-through lookup cache. Keyed by VT resource path (which uniquely
+# encodes an indicator's type and value), so repeated lookups -- and an
+# investigate_sample run whose indicators overlap a prior lookup -- reuse the
+# stored response instead of re-hitting VirusTotal. Bounded by TTL (a verdict
+# stays fresh enough within one investigation) and entry count (oldest evicted).
+# In-memory only; durable persistence is deliberately left for later.
+CACHE_TTL_SECONDS = 300.0
+CACHE_MAX_ENTRIES = 512
 
 # Indicator-extraction patterns. Domains are taken from URL hosts and email
 # addresses only; standalone bare-domain scanning is skipped because dotted code
@@ -270,6 +284,46 @@ def _url_id(url: str) -> str:
     return base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
 
 
+class _TTLCache:
+    """A tiny bounded, time-to-live cache for successful lookups.
+
+    Read-through and in-memory: _vt_get consults it before any network call and
+    stores only successful responses, so a transient 429/5xx or a 404 is never
+    cached. Bounded two ways -- each entry expires after `ttl` seconds, and the
+    store holds at most `max_entries` (the oldest is evicted first). The clock is
+    injectable so expiry is testable without real time passing.
+    """
+
+    def __init__(self, ttl: float, max_entries: int, clock=time.monotonic):
+        self._ttl = ttl
+        self._max = max_entries
+        self._clock = clock
+        self._store: OrderedDict[str, tuple[float, dict]] = OrderedDict()
+
+    def get(self, key: str) -> dict | None:
+        entry = self._store.get(key)
+        if entry is None:
+            return None
+        expires_at, value = entry
+        if self._clock() >= expires_at:
+            del self._store[key]  # lazily drop the expired entry
+            return None
+        self._store.move_to_end(key)  # mark as most-recently used
+        return value
+
+    def set(self, key: str, value: dict) -> None:
+        self._store[key] = (self._clock() + self._ttl, value)
+        self._store.move_to_end(key)
+        while len(self._store) > self._max:
+            self._store.popitem(last=False)  # evict the oldest entry
+
+    def clear(self) -> None:
+        self._store.clear()
+
+
+_cache = _TTLCache(CACHE_TTL_SECONDS, CACHE_MAX_ENTRIES)
+
+
 def _retry_delay(resp: httpx.Response, attempt: int) -> float:
     """Seconds to wait before the next retry.
 
@@ -291,11 +345,17 @@ def _retry_delay(resp: httpx.Response, attempt: int) -> float:
 async def _vt_get(path: str) -> dict:
     """GET {VT_API_BASE}/{path} with auth, via the shared client.
 
-    A 429 or transient 5xx is retried up to MAX_RETRIES times (waiting per
-    _retry_delay between attempts); once retries are exhausted the final
-    response's status raises, and every other error propagates immediately, so
-    the caller maps it to a one-line message via _handle_error.
+    Read-through cached: a fresh cache hit for this path skips the network
+    entirely. On a miss, a 429 or transient 5xx is retried up to MAX_RETRIES
+    times (waiting per _retry_delay between attempts); once retries are exhausted
+    the final response's status raises, and every other error propagates
+    immediately, so the caller maps it to a one-line message via _handle_error.
+    Only a successful response is cached -- errors are never stored.
     """
+    cached = _cache.get(path)
+    if cached is not None:
+        return cached
+
     client = _get_client()
     url = f"{VT_API_BASE}/{path}"
     headers = {"x-apikey": VT_API_KEY}
@@ -305,7 +365,9 @@ async def _vt_get(path: str) -> dict:
             await asyncio.sleep(_retry_delay(resp, attempt))
             continue
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        _cache.set(path, data)
+        return data
 
 
 def _handle_error(e: Exception, indicator: str) -> str:

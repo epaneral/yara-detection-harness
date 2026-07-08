@@ -231,7 +231,9 @@ A transient **429 or 5xx is retried first** — honoring a `Retry-After` header 
 present, otherwise bounded exponential backoff, capped at a few attempts — and only
 degrades to the one-line message above once retries are exhausted. Lookups share a
 single pooled HTTP client (closed on server shutdown) rather than opening a fresh
-connection per call.
+connection per call, and each **successful** lookup is served through a small
+in-process TTL cache — so a repeated indicator (including across an `investigate_sample`
+run) reuses the stored verdict instead of re-hitting VirusTotal. Errors are never cached.
 
 ## Security notes
 
@@ -243,4 +245,5 @@ connection per call.
 ## Roadmap (deliberately out of scope here)
 
 - Multi-source fan-out (e.g. URLhaus, Censys, urlscan) behind the same verdict shape.
-- Caching / persistence and a formal evaluation suite.
+- Durable cache **persistence** (the in-process TTL cache above is in-memory only) and
+  a formal evaluation suite.
