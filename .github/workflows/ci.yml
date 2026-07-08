@@ -69,6 +69,35 @@ jobs:
       - run: pip install -r enrichment-mcp/requirements-dev.lock
       - run: pytest enrichment-mcp -v
 
+  # yaraQA rule-quality gate (Florian Roth's analyzer wired in as a gate, not
+  # just a runner). yaraQA is not on PyPI, so CI clones it at a pinned commit;
+  # its runtime deps are pinned in requirements-yaraqa.txt. yaraQA exits non-zero
+  # when its (baseline- and level-filtered) output is non-empty, so the run below
+  # IS the gate: it fails on any NEW issue at level >= 2 (warning/critical) that
+  # is not already in the reviewed baseline. The baseline records the current,
+  # deliberately-accepted issues (short atoms like IEX, ascii+wide+nocase for
+  # real-world UTF-16 defense, the -enc abbreviation regex); regenerate it after
+  # an intentional rule change with:
+  #   python <yaraQA>/yaraQA.py -d rules/ -o tests/yaraqa-baseline.json
+  yaraqa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          # Install from the fully-resolved, hashed lock (requirements-yaraqa.txt is
+          # the editable source), keyed on the lock like the other jobs.
+          cache-dependency-path: requirements-yaraqa.lock
+      - run: pip install -r requirements-yaraqa.lock
+      - name: Fetch yaraQA (pinned commit; not on PyPI)
+        run: |
+          git clone https://github.com/Neo23x0/yaraQA yaraqa-tool
+          git -C yaraqa-tool checkout df60c14fb264b3cc6ea8d4df49b47d628af2a980
+      - name: Rule-quality gate (fail on new level>=2 issues not in baseline)
+        run: python yaraqa-tool/yaraQA.py -d rules/ -b tests/yaraqa-baseline.json -l 2 -o yaraqa-issues.json
+
   # Single aggregate gate. Branch protection requires only this check, so jobs
   # can be added or renamed above without touching the protection rule - just
   # list them in `needs` below. Every needed job must SUCCEED: anything else
@@ -77,7 +106,7 @@ jobs:
   # revisit once path-filtered jobs are deliberately set up.
   all-green:
     if: always()
-    needs: [lint, harness, enrichment-mcp]
+    needs: [lint, harness, enrichment-mcp, yaraqa]
     runs-on: ubuntu-latest
     steps:
       - name: Require every needed job to have succeeded

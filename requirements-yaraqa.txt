@@ -1,0 +1,7 @@
+# Editable declaration of the yaraQA rule-quality gate's direct deps, ==-pinned
+# to CI-green versions. yaraQA itself is not on PyPI (CI clones it at a pinned
+# commit); these are the tool's runtime deps. They resolve into the fully-
+# resolved requirements-yaraqa.lock (every transitive dep pinned and hashed)
+# that the `yaraqa` CI job installs.
+yara-python==4.5.4
+plyara==2.2.8

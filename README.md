@@ -50,7 +50,7 @@ enrichment-mcp/
   investigate_demo.py YARA flag -> investigate_sample chain, end to end
 .mcp.json     project-scoped MCP config (Claude Code auto-discovers the server)
 ruff.toml     lint + format configuration for the Python (harness + MCP server)
-.github/workflows/ci.yml   per-component CI (lint / harness / enrichment-mcp) on every push
+.github/workflows/ci.yml   per-component CI (lint / harness / enrichment-mcp / yaraqa) on every push
 ```
 
 ## Corpus design
@@ -105,10 +105,13 @@ ruff format --check .   # formatting gate
 ruff check .            # lint gate
 ```
 
-CI runs these as three independent jobs — `lint` (repo-wide ruff), `harness`
-(the rules + corpus suite), and `enrichment-mcp` (the MCP server's unit tests) —
-each set up with only the dependencies it needs. The MCP server keeps its own
-dependency set, so its tests install and run separately:
+CI runs these as four independent jobs — `lint` (repo-wide ruff), `harness`
+(the rules + corpus suite), `enrichment-mcp` (the MCP server's unit tests), and
+`yaraqa` (Florian Roth's [yaraQA](https://github.com/Neo23x0/yaraQA) rule-quality
+analyzer) — each set up with only the dependencies it needs. The `yaraqa` job runs
+yaraQA over `rules/` and fails on any new level-≥2 (warning/critical) issue not
+already in the reviewed baseline `tests/yaraqa-baseline.json`. The MCP server keeps
+its own dependency set, so its tests install and run separately:
 
 ```bash
 pip install -r enrichment-mcp/requirements-dev.txt
@@ -116,10 +119,10 @@ pytest enrichment-mcp -v
 ```
 
 The same reproducibility logic extends past the direct pins to the whole tree. CI
-installs from fully-resolved lock files — `requirements.lock` for the harness and
-`enrichment-mcp/requirements-dev.lock` for the MCP server — that pin *and hash* every
-transitive dependency, not just the direct ones the `requirements.txt` files declare.
-The locks are compiled with [`uv`](https://docs.astral.sh/uv/)
+installs from fully-resolved lock files — `requirements.lock` for the harness,
+`enrichment-mcp/requirements-dev.lock` for the MCP server, and `requirements-yaraqa.lock`
+for the yaraQA gate — that pin *and hash* every transitive dependency, not just the direct
+ones the `requirements.txt` files declare. The locks are compiled with [`uv`](https://docs.astral.sh/uv/)
 (`uv pip compile <src> -o <lock> --universal --generate-hashes`); the header of each
 lock records the exact command to regenerate it. uv over `pip-compile` here because it
 is one fast static binary, `--universal` resolves a single lock valid on both the Linux
@@ -128,6 +131,15 @@ that vanilla `pip` installs — no extra tool in CI. The hashes put pip in
 `--require-hashes` mode, so an install fails closed rather than drifting to an altered
 or newly-floated dependency. The `requirements.txt` files stay the hand-edited direct-pin
 sources; recompile the matching lock whenever you change one.
+
+yaraQA is cloned rather than pip-installed (it is not on PyPI); the local run mirrors
+the `yaraqa` CI gate:
+
+```bash
+git clone https://github.com/Neo23x0/yaraQA
+pip install -r requirements-yaraqa.txt
+python yaraQA/yaraQA.py -d rules/ -b tests/yaraqa-baseline.json -l 2
+```
 
 ## Rule design notes
 
@@ -186,8 +198,7 @@ Rules are written with YARA's matching engine in mind, not just correctness:
 
 Deliberately out of the current scope to keep it shippable:
 
-- `yaraQA` (Florian Roth) wired in as a performance/quality **gate**, not just a runner.
-- Custom `plyara`-based checks beyond yaraQA.
+- Custom `plyara`-based checks beyond the yaraQA gate.
 - Two-path ingestion: one scraped static source + one structured feed.
 - A retro-hunt job running new rules over the stored corpus.
 

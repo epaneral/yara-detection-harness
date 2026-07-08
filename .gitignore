@@ -5,5 +5,10 @@ __pycache__/
 .venv/
 venv/
 
+# yaraQA rule-quality gate run artifacts (the tool is cloned in CI and writes these)
+yaraqa-issues.json
+yara-forge.log
+/yaraqa-tool/
+
 # Secrets — never commit real API keys (enrichment-mcp)
 .env

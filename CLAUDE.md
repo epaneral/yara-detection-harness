@@ -17,16 +17,20 @@ Two independent Python components with separate deps. `pytest.ini` scopes `testp
 pip install -r requirements.txt && pytest -v        # YARA harness
 ruff format --check . && ruff check .               # format + lint gates (pinned ruff==0.15.18 in CI)
 pip install -r enrichment-mcp/requirements-dev.txt && pytest enrichment-mcp -v   # MCP server
+# yaraQA rule-quality gate — mirrors the `yaraqa` CI job (yaraQA is cloned, not on PyPI)
+git clone https://github.com/Neo23x0/yaraQA
+pip install -r requirements-yaraqa.txt
+python yaraQA/yaraQA.py -d rules/ -b tests/yaraqa-baseline.json -l 2
 ```
 
 The `requirements.txt` files are the hand-edited direct-pin sources (fine for local
-installs). CI instead installs from fully-resolved, hashed lock files — `requirements.lock`
-and `enrichment-mcp/requirements-dev.lock` — so transitive deps don't float. Regenerate the
-matching lock after editing a pin (command is in each lock's header):
-`uv pip compile <src> -o <lock> --universal --generate-hashes`.
+installs). CI instead installs from fully-resolved, hashed lock files — `requirements.lock`,
+`enrichment-mcp/requirements-dev.lock`, and `requirements-yaraqa.lock` — so transitive deps
+don't float. Regenerate the matching lock after editing a pin (command is in each lock's
+header): `uv pip compile <src> -o <lock> --universal --generate-hashes`.
 
-CI = `lint` + `harness` + `enrichment-mcp` jobs, plus an `all-green` aggregate that branch
-protection requires; a skipped needed job fails it on purpose.
+CI = `lint` + `harness` + `enrichment-mcp` + `yaraqa` jobs, plus an `all-green` aggregate that
+branch protection requires; a skipped needed job fails it on purpose.
 
 ## Architecture
 
@@ -46,6 +50,9 @@ protection requires; a skipped needed job fails it on purpose.
   each rule's `meta`/comments name the one feature keeping it off its benign twin — keep that
   comment accurate when editing. Each rule's `meta` also carries an `attack` field listing the
   MITRE ATT&CK technique ID(s) it detects (comma-separated) — add it when writing a new rule.
+  The `yaraqa` CI job gates rule quality: new level-≥2 yaraQA issues fail the build unless
+  they're already in the reviewed baseline `tests/yaraqa-baseline.json` — add deliberately-accepted
+  issues (short atoms, `ascii`+`wide`+`nocase` modifiers, the `-enc` abbreviation regex) there.
 - **enrichment-mcp/** — self-contained VirusTotal MCP server (`server.py`, stdio, read-only
   reputation lookups (hash/URL/IP/domain) plus extract/investigate tools, normalized verdict
   shape). Separate deps; not run by the bare `pytest`. `VT_API_KEY`
