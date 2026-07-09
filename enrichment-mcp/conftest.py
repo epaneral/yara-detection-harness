@@ -28,3 +28,4 @@ def _clear_lookup_cache():
 def _no_source_keys(monkeypatch):
     monkeypatch.setattr(server, "VT_API_KEY", "")
     monkeypatch.setattr(server, "URLHAUS_API_KEY", "")
+    monkeypatch.setattr(server, "URLSCAN_API_KEY", "")

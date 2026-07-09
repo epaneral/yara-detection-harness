@@ -204,7 +204,8 @@ def test_all_sources_urlhaus_only_when_no_vt(monkeypatch):
 
     row = out["results"][0]
     assert set(row["sources"]) == {"urlhaus"}  # only the configured source ran
-    assert row["consensus"]["sources_skipped"] == ["virustotal"]  # VT skipped, no key
+    assert "virustotal" in row["consensus"]["sources_skipped"]  # VT skipped, no key
+    assert "urlhaus" not in row["consensus"]["sources_skipped"]
     assert out["summary"]["malicious"] == 1
 
 

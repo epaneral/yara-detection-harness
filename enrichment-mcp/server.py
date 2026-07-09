@@ -11,9 +11,9 @@ can call mid-investigation, returning a *normalized* verdict for an indicator
 
 Design notes:
   - Read-only. Reputation lookups only -- nothing here submits, mutates, or deletes.
-  - Sources sit behind a small adapter interface (ReputationSource). VirusTotal
-    and URLhaus are wired in, and the lookup_indicator tool fans out across every
-    configured source, returning each one's verdict under the SAME normalized
+  - Sources sit behind a small adapter interface (ReputationSource). VirusTotal,
+    URLhaus, and urlscan are wired in, and the lookup_indicator tool fans out across
+    every configured source, returning each one's verdict under the SAME normalized
     shape plus a combined consensus. More sources slot in without changing that shape.
   - API key is read from the VT_API_KEY environment variable, never hardcoded.
   - Local stdio transport: launched as a subprocess by an MCP client.
@@ -24,9 +24,8 @@ Design notes:
     repeated indicators (including across an investigate_sample run) do not
     re-hit VirusTotal.
 
-Scope fence (deliberately NOT built here yet): further sources (urlscan/Censys),
-durable cache persistence, and a formal eval suite. See README.md "Roadmap" and
-multi-source-design.md for those.
+Scope fence (deliberately NOT built here yet): further sources (Censys) and durable
+cache persistence. See README.md "Roadmap" and multi-source-design.md for those.
 """
 
 import asyncio
@@ -39,6 +38,7 @@ import time
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from typing import Literal
+from urllib.parse import quote
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -63,6 +63,12 @@ VT_API_KEY = os.environ.get("VT_API_KEY", "")
 # mandatory since 2025-06-30. A missing key just skips the source in the fan-out.
 URLHAUS_API_BASE = "https://urlhaus-api.abuse.ch/v1"
 URLHAUS_API_KEY = os.environ.get("URLHAUS_API_KEY", "")
+# urlscan.io: a read-only reputation source. A lookup is a GET search for existing
+# scans of the indicator, then a GET of the top result's verdict (read-only; the
+# submission/scan endpoint is deliberately NOT used). Key via the API-Key header;
+# a missing key just skips the source in the fan-out.
+URLSCAN_API_BASE = "https://urlscan.io/api/v1"
+URLSCAN_API_KEY = os.environ.get("URLSCAN_API_KEY", "")
 REQUEST_TIMEOUT = 30.0  # seconds
 
 # Retry policy for *transient* failures only (429 rate-limit and 5xx). Bounded
@@ -776,9 +782,98 @@ class URLhausSource(ReputationSource):
         return _urlhaus_verdict(value, kind, data)
 
 
+# urlscan search field per indicator kind (ElasticSearch query-string syntax).
+_URLSCAN_FIELD = {"url": "page.url", "ip_address": "page.ip", "domain": "page.domain"}
+
+
+async def _urlscan_search(kind: str, value: str) -> dict | None:
+    """GET the most recent urlscan scan matching the indicator, or None if none."""
+    q = quote(f'{_URLSCAN_FIELD[kind]}:"{value}"')
+    data = await _request_json(
+        "GET",
+        f"{URLSCAN_API_BASE}/search/?q={q}&size=1",
+        headers={"API-Key": URLSCAN_API_KEY},
+        cache_key=f"urlscan:search:{kind}:{value}",
+    )
+    results = data.get("results") or []
+    return results[0] if results else None
+
+
+async def _urlscan_result(uuid: str) -> dict:
+    """GET a single urlscan scan result (which carries the verdicts)."""
+    return await _request_json(
+        "GET",
+        f"{URLSCAN_API_BASE}/result/{uuid}/",
+        headers={"API-Key": URLSCAN_API_KEY},
+        cache_key=f"urlscan:result:{uuid}",
+    )
+
+
+def _urlscan_error(e: Exception, indicator: str) -> str:
+    """Map a urlscan transport error to an actionable line (no stack traces)."""
+    if isinstance(e, httpx.HTTPStatusError):
+        code = e.response.status_code
+        if code == 401:
+            return "Error: urlscan rejected the API key (401). Check that URLSCAN_API_KEY is valid."
+        if code == 429:
+            return "Error: urlscan rate limit hit (429) -- wait a moment and retry."
+        return f"Error: urlscan returned HTTP {code} for '{indicator}'."
+    if isinstance(e, httpx.TimeoutException):
+        return f"Error: request to urlscan timed out after {REQUEST_TIMEOUT:.0f}s. Try again."
+    if isinstance(e, httpx.RequestError):
+        return f"Error: network error contacting urlscan ({type(e).__name__}). Check connectivity."
+    return f"Error: unexpected {type(e).__name__} while looking up '{indicator}' on urlscan."
+
+
+def _urlscan_verdict(indicator: str, kind: str, hit: dict, result: dict) -> str:
+    """Map a urlscan scan + its result verdicts into the normalized verdict.
+
+    A scan exists (the search hit), so this is never a not-found. The verdict comes
+    from result.verdicts.overall: `malicious` (bool) -> malicious 1/0, and the
+    detected `brands` join urlscan in flagged_by. A scanned-but-unflagged indicator
+    is a clean verdict (malicious 0), distinct from "no scans" (a not-found).
+    """
+    overall = (result.get("verdicts") or {}).get("overall") or {}
+    is_mal = bool(overall.get("malicious"))
+    brands = sorted({b.get("name") for b in (overall.get("brands") or []) if b.get("name")})
+    flagged = ["urlscan", *brands] if is_mal else []
+    return _verdict(
+        indicator,
+        kind,
+        malicious=1 if is_mal else 0,
+        flagged_by=flagged,
+        permalink=f"https://urlscan.io/result/{hit.get('_id', '')}/",
+    )
+
+
+class UrlscanSource(ReputationSource):
+    """urlscan.io adapter. Answers url/ip/domain by searching existing scans
+    (read-only) and reading the top result's verdict. Behind the same interface
+    and normalized shape as the other sources.
+    """
+
+    name = "urlscan"
+
+    def supports(self, kind: str) -> bool:
+        return kind in ("url", "ip_address", "domain")
+
+    def configured(self) -> bool:
+        return bool(URLSCAN_API_KEY)
+
+    async def lookup(self, kind: str, value: str) -> str:
+        try:
+            hit = await _urlscan_search(kind, value)
+            if hit is None:
+                return f"Not found: '{value}' has no scans on urlscan (no reputation data)."
+            result = await _urlscan_result(hit["_id"])
+            return _urlscan_verdict(value, kind, hit, result)
+        except Exception as e:  # noqa: BLE001 - mapped to actionable text by _urlscan_error
+            return _urlscan_error(e, value)
+
+
 # The source registry the fan-out iterates; order here is the display order in
 # the envelope's per-source map. New sources are appended.
-_SOURCES: list[ReputationSource] = [VirusTotalSource(), URLhausSource()]
+_SOURCES: list[ReputationSource] = [VirusTotalSource(), URLhausSource(), UrlscanSource()]
 
 
 def _sources_for(kind: str) -> tuple[list[ReputationSource], list[str]]:

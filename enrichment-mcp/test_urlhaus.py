@@ -253,7 +253,8 @@ def test_fanout_two_sources_malicious(monkeypatch):
     assert out["consensus"]["malicious"] is True
     assert out["consensus"]["sources_malicious"] == ["urlhaus", "virustotal"]
     assert out["consensus"]["max_malicious"] == 7  # max(2, 7), never 2 + 7
-    assert out["consensus"]["sources_skipped"] == []
+    # the two configured sources ran (other, keyless sources may be skipped)
+    assert {"virustotal", "urlhaus"}.isdisjoint(out["consensus"]["sources_skipped"])
 
 
 def test_fanout_urlhaus_errors_does_not_sink_vt(monkeypatch):
@@ -296,5 +297,6 @@ def test_fanout_urlhaus_only_when_no_vt_key(monkeypatch):
     )
 
     assert set(out["sources"]) == {"urlhaus"}
-    assert out["consensus"]["sources_skipped"] == ["virustotal"]
+    assert "virustotal" in out["consensus"]["sources_skipped"]  # VT skipped, no key
+    assert "urlhaus" not in out["consensus"]["sources_skipped"]
     assert out["consensus"]["malicious"] is True
