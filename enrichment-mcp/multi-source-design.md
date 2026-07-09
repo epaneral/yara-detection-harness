@@ -97,3 +97,10 @@ Two layers, mirroring the repo's existing `pytest`-vs-`smoke_test.py` split:
 6. ~~**AbuseIPDB adapter**~~ ✅ done — IP reputation (abuseConfidenceScore → verdict). Replaced
    the planned Censys adapter, which returns host/attack-surface data, not a malicious
    verdict, and so can't produce a reputation verdict for the consensus.
+
+**Rollout complete.** Durable cache persistence was considered and **deliberately not
+built**: reputation is time-sensitive, so verdicts shouldn't outlive the process. The
+short-TTL in-memory cache is the intended design — persisting to disk would push toward
+staler verdicts, add concurrency/I-O complexity and a corruption/trust surface, and
+record a durable trail of every indicator looked up, all for little cross-session gain
+(the in-memory cache already covers within-session dedup).
