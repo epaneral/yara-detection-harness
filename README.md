@@ -67,6 +67,7 @@ ingestion/    two-path IOC ingestion (separate CLI component, own deps)
   store.py            JSONL store: load / merge / write, dedup by (type, indicator)
   adapters/           source adapters (structured feed + scraped source)
   cli.py              python -m ingestion.cli --feed/--scrape <path|url>
+  enrich.py           python -m ingestion.enrich (drives enrichment-mcp over stdio)
   fixtures/           synthetic defanged feeds + pages;  test_*.py  offline tests
 .mcp.json     project-scoped MCP config (Claude Code auto-discovers the server)
 ruff.toml     lint + format configuration for the Python (harness + MCP server)
