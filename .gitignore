@@ -10,5 +10,8 @@ yaraqa-issues.json
 yara-forge.log
 /yaraqa-tool/
 
+# Ingestion CLI output store (runtime artifact; fixtures are committed, the store is not)
+ingestion/store/
+
 # Secrets — never commit real API keys (enrichment-mcp)
 .env

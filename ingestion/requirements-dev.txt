@@ -1,0 +1,4 @@
+# Dev/test dependencies for the ingestion component: the runtime deps plus the test
+# runner. The runtime requirements.txt stays free of test-only packages.
+-r requirements.txt
+pytest==9.1.1

@@ -1,0 +1,7 @@
+[
+  {"indicator": "http://192.0.2.10/gate.php", "type": "url", "tags": ["c2", "phishing-kit"]},
+  {"indicator": "192.0.2.44", "type": "ip_address", "tags": ["c2"]},
+  {"indicator": "malicious.example", "type": "domain", "tags": ["phishing"]},
+  {"indicator": "d41d8cd98f00b204e9800998ecf8427e", "type": "file_hash", "tags": ["dropper"]},
+  {"indicator": "203.0.113.7", "type": "ip_address"}
+]
