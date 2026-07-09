@@ -64,7 +64,8 @@ the others — the same per-row degradation `investigate_sample` already uses.
 | VirusTotal | `VT_API_KEY` | file/url/ip/domain | wired in |
 | URLhaus (abuse.ch) | `URLHAUS_API_KEY` | url/ip/domain | wired in — read-only **POST** query; `Auth-Key` header (mandatory since 2025-06-30) |
 | urlscan.io | `URLSCAN_API_KEY` | url/ip/domain | wired in — GET search existing scans → read top result's verdict; `API-Key` header |
-| Censys | `CENSYS_API_ID` / `CENSYS_API_SECRET` | ip/domain | GET, heavier — **note:** returns host data, not a malicious verdict (see rollout) |
+| AbuseIPDB | `ABUSEIPDB_API_KEY` | ip | wired in — GET check; abuseConfidenceScore (0-100) thresholded to the verdict; `Key` header |
+| ~~Censys~~ | — | — | **dropped** — its API returns host/attack-surface data, not a malicious verdict, so it can't produce a reputation verdict; AbuseIPDB fills the IP slot instead |
 
 A source with no key is **skipped**, so the server still runs with just VT — as today.
 
@@ -93,4 +94,6 @@ Two layers, mirroring the repo's existing `pytest`-vs-`smoke_test.py` split:
 3. ~~**`investigate_sample` `all_sources` toggle** — fan out per indicator.~~ ✅ done
 4. ~~**Eval suite** (offline golden-file gate + opt-in `eval_live.py`).~~ ✅ done
 5. ~~**urlscan adapter** (search existing scans -> read the top result's verdict).~~ ✅ done
-6. **Censys adapter.**
+6. ~~**AbuseIPDB adapter**~~ ✅ done — IP reputation (abuseConfidenceScore → verdict). Replaced
+   the planned Censys adapter, which returns host/attack-surface data, not a malicious
+   verdict, and so can't produce a reputation verdict for the consensus.

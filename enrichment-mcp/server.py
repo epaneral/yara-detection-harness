@@ -12,9 +12,9 @@ can call mid-investigation, returning a *normalized* verdict for an indicator
 Design notes:
   - Read-only. Reputation lookups only -- nothing here submits, mutates, or deletes.
   - Sources sit behind a small adapter interface (ReputationSource). VirusTotal,
-    URLhaus, and urlscan are wired in, and the lookup_indicator tool fans out across
-    every configured source, returning each one's verdict under the SAME normalized
-    shape plus a combined consensus. More sources slot in without changing that shape.
+    URLhaus, urlscan, and AbuseIPDB are wired in, and the lookup_indicator tool fans
+    out across every configured source, returning each one's verdict under the SAME
+    normalized shape plus a combined consensus. More slot in without changing that shape.
   - API key is read from the VT_API_KEY environment variable, never hardcoded.
   - Local stdio transport: launched as a subprocess by an MCP client.
   - One pooled HTTP client is reused across lookups (closed on shutdown), and a
@@ -24,8 +24,8 @@ Design notes:
     repeated indicators (including across an investigate_sample run) do not
     re-hit VirusTotal.
 
-Scope fence (deliberately NOT built here yet): further sources (Censys) and durable
-cache persistence. See README.md "Roadmap" and multi-source-design.md for those.
+Scope fence (deliberately NOT built here yet): durable cache persistence. See
+README.md "Roadmap" and multi-source-design.md for that.
 """
 
 import asyncio
@@ -69,6 +69,14 @@ URLHAUS_API_KEY = os.environ.get("URLHAUS_API_KEY", "")
 # a missing key just skips the source in the fan-out.
 URLSCAN_API_BASE = "https://urlscan.io/api/v1"
 URLSCAN_API_KEY = os.environ.get("URLSCAN_API_KEY", "")
+# AbuseIPDB: a read-only IP-reputation source. The check endpoint is a GET keyed by
+# the `Key` header; it returns an abuseConfidenceScore (0-100) we threshold into the
+# verdict. A missing key just skips the source in the fan-out.
+ABUSEIPDB_API_BASE = "https://api.abuseipdb.com/api/v2"
+ABUSEIPDB_API_KEY = os.environ.get("ABUSEIPDB_API_KEY", "")
+ABUSEIPDB_MAX_AGE_DAYS = 90  # reports considered within this window
+ABUSEIPDB_MALICIOUS_SCORE = 75  # confidence >= this -> malicious
+ABUSEIPDB_SUSPICIOUS_SCORE = 25  # confidence in [this, malicious) -> suspicious
 REQUEST_TIMEOUT = 30.0  # seconds
 
 # Retry policy for *transient* failures only (429 rate-limit and 5xx). Bounded
@@ -871,9 +879,95 @@ class UrlscanSource(ReputationSource):
             return _urlscan_error(e, value)
 
 
+async def _abuseipdb_check(ip: str) -> dict:
+    """GET an AbuseIPDB reputation check for an IP (read-only) and return the JSON."""
+    return await _request_json(
+        "GET",
+        f"{ABUSEIPDB_API_BASE}/check?ipAddress={quote(ip)}&maxAgeInDays={ABUSEIPDB_MAX_AGE_DAYS}",
+        headers={"Key": ABUSEIPDB_API_KEY, "Accept": "application/json"},
+        cache_key=f"abuseipdb:check:{ip}",
+    )
+
+
+def _abuseipdb_error(e: Exception, indicator: str) -> str:
+    """Map an AbuseIPDB transport error to an actionable line (no stack traces)."""
+    if isinstance(e, httpx.HTTPStatusError):
+        code = e.response.status_code
+        if code == 401:
+            return (
+                "Error: AbuseIPDB rejected the API key (401). "
+                "Check that ABUSEIPDB_API_KEY is valid."
+            )
+        if code == 429:
+            return "Error: AbuseIPDB rate limit hit (429) -- wait a moment and retry."
+        if code == 422:
+            return f"Error: AbuseIPDB rejected '{indicator}' as an invalid IP (422)."
+        return f"Error: AbuseIPDB returned HTTP {code} for '{indicator}'."
+    if isinstance(e, httpx.TimeoutException):
+        return f"Error: request to AbuseIPDB timed out after {REQUEST_TIMEOUT:.0f}s. Try again."
+    if isinstance(e, httpx.RequestError):
+        return (
+            f"Error: network error contacting AbuseIPDB ({type(e).__name__}). Check connectivity."
+        )
+    return f"Error: unexpected {type(e).__name__} while looking up '{indicator}' on AbuseIPDB."
+
+
+def _abuseipdb_verdict(ip: str, data: dict) -> str:
+    """Map an AbuseIPDB check into the normalized verdict.
+
+    The abuseConfidenceScore (0-100) is thresholded: >= ABUSEIPDB_MALICIOUS_SCORE is
+    malicious, [suspicious, malicious) is suspicious, below is clean. AbuseIPDB always
+    answers for a valid IP (an unreported IP just scores 0), so this is never a
+    not-found. The raw score is carried through as `reputation`.
+    """
+    d = data.get("data") or {}
+    try:
+        score = int(d.get("abuseConfidenceScore") or 0)
+    except (TypeError, ValueError):
+        score = 0
+    is_mal = score >= ABUSEIPDB_MALICIOUS_SCORE
+    is_susp = ABUSEIPDB_SUSPICIOUS_SCORE <= score < ABUSEIPDB_MALICIOUS_SCORE
+    flagged = ["abuseipdb"] if (is_mal or is_susp) else []
+    return _verdict(
+        ip,
+        "ip_address",
+        malicious=1 if is_mal else 0,
+        suspicious=1 if is_susp else 0,
+        reputation=score,
+        flagged_by=flagged,
+        permalink=f"https://www.abuseipdb.com/check/{ip}",
+    )
+
+
+class AbuseIPDBSource(ReputationSource):
+    """AbuseIPDB adapter -- IP reputation only. Thresholds the abuseConfidenceScore
+    into the normalized verdict; behind the same interface as the other sources.
+    """
+
+    name = "abuseipdb"
+
+    def supports(self, kind: str) -> bool:
+        return kind == "ip_address"
+
+    def configured(self) -> bool:
+        return bool(ABUSEIPDB_API_KEY)
+
+    async def lookup(self, kind: str, value: str) -> str:
+        try:
+            data = await _abuseipdb_check(value)
+        except Exception as e:  # noqa: BLE001 - mapped to actionable text by _abuseipdb_error
+            return _abuseipdb_error(e, value)
+        return _abuseipdb_verdict(value, data)
+
+
 # The source registry the fan-out iterates; order here is the display order in
 # the envelope's per-source map. New sources are appended.
-_SOURCES: list[ReputationSource] = [VirusTotalSource(), URLhausSource(), UrlscanSource()]
+_SOURCES: list[ReputationSource] = [
+    VirusTotalSource(),
+    URLhausSource(),
+    UrlscanSource(),
+    AbuseIPDBSource(),
+]
 
 
 def _sources_for(kind: str) -> tuple[list[ReputationSource], list[str]]:
