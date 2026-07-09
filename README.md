@@ -60,9 +60,15 @@ enrichment-mcp/
   eval_live.py        opt-in live-key eval: loose invariants against the real APIs
   smoke_test.py       live stdio smoke test (works with or without a VT key)
   investigate_demo.py YARA flag -> investigate_sample chain, end to end
+ingestion/    two-path IOC ingestion (separate CLI component, own deps)
+  record.py           normalized IOC record + dedup key
+  store.py            JSONL store: load / merge / write, dedup by (type, indicator)
+  adapters/           source adapters (structured feed; scraped source in PR2)
+  cli.py              python -m ingestion.cli --feed <path|url>
+  fixtures/           synthetic defanged feeds;  test_*.py  offline tests
 .mcp.json     project-scoped MCP config (Claude Code auto-discovers the server)
 ruff.toml     lint + format configuration for the Python (harness + MCP server)
-.github/workflows/ci.yml   per-component CI (lint / harness / enrichment-mcp / yaraqa) on every push
+.github/workflows/ci.yml   per-component CI (lint / harness / enrichment-mcp / yaraqa / ingestion) on every push
 ```
 
 ## Corpus design
@@ -124,10 +130,11 @@ ruff format --check .   # formatting gate
 ruff check .            # lint gate
 ```
 
-CI runs these as four independent jobs — `lint` (repo-wide ruff), `harness`
-(the rules + corpus suite), `enrichment-mcp` (the MCP server's unit tests), and
+CI runs these as five independent jobs — `lint` (repo-wide ruff), `harness`
+(the rules + corpus suite), `enrichment-mcp` (the MCP server's unit tests),
 `yaraqa` (Florian Roth's [yaraQA](https://github.com/Neo23x0/yaraQA) rule-quality
-analyzer) — each set up with only the dependencies it needs. The `yaraqa` job runs
+analyzer), and `ingestion` (the IOC-ingestion component's offline tests) — each set
+up with only the dependencies it needs. The `yaraqa` job runs
 yaraQA over `rules/` with `--ignore-performance` (its regex-timing check is
 non-deterministic across runners) and fails on any new non-performance level-≥2 issue
 not in the reviewed baseline `tests/yaraqa-baseline.json`; the deterministic structural
@@ -159,7 +166,7 @@ the `yaraqa` CI gate:
 ```bash
 git clone https://github.com/Neo23x0/yaraQA
 pip install -r requirements-yaraqa.txt
-python yaraQA/yaraQA.py -d rules/ -b tests/yaraqa-baseline.json -l 2
+python yaraQA/yaraQA.py -d rules/ --ignore-performance -b tests/yaraqa-baseline.json -l 2
 ```
 
 ## Rule design notes

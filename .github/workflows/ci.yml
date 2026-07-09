@@ -102,6 +102,21 @@ jobs:
       - name: Rule-quality gate (fail on new non-performance level>=2 issues not in baseline)
         run: python yaraqa-tool/yaraQA.py -d rules/ --ignore-performance -b tests/yaraqa-baseline.json -l 2 -o yaraqa-issues.json
 
+  # IOC ingestion component: offline tests over the structured-feed adapter, the
+  # JSONL store, and the CLI (fixtures only, no network). Own dev lock, like the
+  # enrichment-mcp job.
+  ingestion:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ingestion/requirements-dev.lock
+      - run: pip install -r ingestion/requirements-dev.lock
+      - run: pytest ingestion -v
+
   # Single aggregate gate. Branch protection requires only this check, so jobs
   # can be added or renamed above without touching the protection rule - just
   # list them in `needs` below. Every needed job must SUCCEED: anything else
@@ -110,7 +125,7 @@ jobs:
   # revisit once path-filtered jobs are deliberately set up.
   all-green:
     if: always()
-    needs: [lint, harness, enrichment-mcp, yaraqa]
+    needs: [lint, harness, enrichment-mcp, yaraqa, ingestion]
     runs-on: ubuntu-latest
     steps:
       - name: Require every needed job to have succeeded
