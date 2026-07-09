@@ -73,12 +73,16 @@ jobs:
   # just a runner). yaraQA is not on PyPI, so CI clones it at a pinned commit;
   # its runtime deps are pinned in requirements-yaraqa.txt. yaraQA exits non-zero
   # when its (baseline- and level-filtered) output is non-empty, so the run below
-  # IS the gate: it fails on any NEW issue at level >= 2 (warning/critical) that
-  # is not already in the reviewed baseline. The baseline records the current,
-  # deliberately-accepted issues (short atoms like IEX, ascii+wide+nocase for
-  # real-world UTF-16 defense, the -enc abbreviation regex); regenerate it after
-  # an intentional rule change with:
-  #   python <yaraQA>/yaraQA.py -d rules/ -o tests/yaraqa-baseline.json
+  # IS the gate: it fails on any NEW non-performance issue at level >= 2 not in
+  # the reviewed baseline.
+  #   --ignore-performance is deliberate: yaraQA's performance analysis includes a
+  #   regex-timing check (PI1) it re-measures every run, so it is non-deterministic
+  #   across CI runners and would flake the gate. The repo's *structural* rule
+  #   conventions (atom-anchored regex, etc.) are instead gated deterministically by
+  #   the plyara suite in tests/test_rule_conventions.py. The baseline is currently
+  #   empty (the rules' only yaraQA findings are the deliberately-accepted performance
+  #   ones, no longer gated); regenerate it after an intentional rule change with:
+  #   python <yaraQA>/yaraQA.py -d rules/ --ignore-performance -l 2 -o tests/yaraqa-baseline.json
   yaraqa:
     runs-on: ubuntu-latest
     steps:
@@ -95,8 +99,8 @@ jobs:
         run: |
           git clone https://github.com/Neo23x0/yaraQA yaraqa-tool
           git -C yaraqa-tool checkout df60c14fb264b3cc6ea8d4df49b47d628af2a980
-      - name: Rule-quality gate (fail on new level>=2 issues not in baseline)
-        run: python yaraqa-tool/yaraQA.py -d rules/ -b tests/yaraqa-baseline.json -l 2 -o yaraqa-issues.json
+      - name: Rule-quality gate (fail on new non-performance level>=2 issues not in baseline)
+        run: python yaraqa-tool/yaraQA.py -d rules/ --ignore-performance -b tests/yaraqa-baseline.json -l 2 -o yaraqa-issues.json
 
   # Single aggregate gate. Branch protection requires only this check, so jobs
   # can be added or renamed above without touching the protection rule - just
