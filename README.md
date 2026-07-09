@@ -128,8 +128,10 @@ CI runs these as four independent jobs — `lint` (repo-wide ruff), `harness`
 (the rules + corpus suite), `enrichment-mcp` (the MCP server's unit tests), and
 `yaraqa` (Florian Roth's [yaraQA](https://github.com/Neo23x0/yaraQA) rule-quality
 analyzer) — each set up with only the dependencies it needs. The `yaraqa` job runs
-yaraQA over `rules/` and fails on any new level-≥2 (warning/critical) issue not
-already in the reviewed baseline `tests/yaraqa-baseline.json`. The MCP server keeps
+yaraQA over `rules/` with `--ignore-performance` (its regex-timing check is
+non-deterministic across runners) and fails on any new non-performance level-≥2 issue
+not in the reviewed baseline `tests/yaraqa-baseline.json`; the deterministic structural
+conventions are covered by the plyara suite instead. The MCP server keeps
 its own dependency set, so its tests install and run separately:
 
 ```bash

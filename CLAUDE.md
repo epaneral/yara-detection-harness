@@ -50,9 +50,9 @@ branch protection requires; a skipped needed job fails it on purpose.
   each rule's `meta`/comments name the one feature keeping it off its benign twin — keep that
   comment accurate when editing. Each rule's `meta` also carries an `attack` field listing the
   MITRE ATT&CK technique ID(s) it detects (comma-separated) — add it when writing a new rule.
-  The `yaraqa` CI job gates rule quality: new level-≥2 yaraQA issues fail the build unless
-  they're already in the reviewed baseline `tests/yaraqa-baseline.json` — add deliberately-accepted
-  issues (short atoms, `ascii`+`wide`+`nocase` modifiers, the `-enc` abbreviation regex) there.
+  The `yaraqa` CI job gates rule quality: it runs yaraQA with `--ignore-performance` (whose
+  regex-timing check is non-deterministic across runners) and fails on any new non-performance
+  level-≥2 issue not in the reviewed baseline `tests/yaraqa-baseline.json` (currently empty).
   Beyond that generic gate, a `plyara`-based convention suite (`tests/test_rule_conventions.py`,
   in the `harness` pytest job) parses each rule's source and enforces the house style — a complete
   `meta` block, well-formed MITRE `attack` IDs, a controlled `severity` vocabulary, atom-anchored
