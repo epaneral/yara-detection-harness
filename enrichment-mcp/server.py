@@ -274,6 +274,14 @@ class InvestigateInput(BaseModel):
         ge=0.0,
         le=60.0,
     )
+    all_sources: bool = Field(
+        False,
+        description=(
+            "Query every configured reputation source per indicator (the "
+            "lookup_indicator fan-out) instead of VirusTotal only; each row then "
+            "carries per-source verdicts and a consensus"
+        ),
+    )
 
 
 # Maps an indicator kind to the existing typed input model (and its field) that
@@ -1065,6 +1073,43 @@ def extract_indicators(params: ExtractInput) -> str:
     return json.dumps({"count": len(inds), "indicators": inds}, indent=2)
 
 
+def _tally_single(row: dict, raw: str, tally: dict) -> None:
+    """VirusTotal-only investigate row: attach a verdict or error and bump the tally."""
+    try:
+        verdict = json.loads(raw)
+    except ValueError:
+        row["error"] = raw
+        tally["not_found" if raw.startswith("Not found:") else "errors"] += 1
+    else:
+        row["verdict"] = verdict
+        if verdict.get("malicious", 0) > 0:
+            tally["malicious"] += 1
+        elif verdict.get("suspicious", 0) > 0:
+            tally["suspicious"] += 1
+        else:
+            tally["clean_or_unknown"] += 1
+
+
+def _tally_multi(row: dict, envelope: dict, tally: dict) -> None:
+    """Multi-source investigate row: attach per-source verdicts + consensus and bump
+    the tally from the consensus (never merging counts across sources)."""
+    sources, consensus = envelope["sources"], envelope["consensus"]
+    row["sources"] = sources
+    row["consensus"] = consensus
+    completed = consensus["sources_completed"]
+    if consensus["malicious"]:
+        tally["malicious"] += 1
+    elif consensus["suspicious"]:
+        tally["suspicious"] += 1
+    elif not completed:
+        # nothing answered: all sources errored (or, degenerate, none configured)
+        tally["errors" if consensus["sources_errored"] else "clean_or_unknown"] += 1
+    elif all("not_found" in sources[name] for name in completed):
+        tally["not_found"] += 1  # every source that answered had no data
+    else:
+        tally["clean_or_unknown"] += 1
+
+
 @mcp.tool(
     name="investigate_sample",
     annotations={
@@ -1076,7 +1121,7 @@ def extract_indicators(params: ExtractInput) -> str:
     },
 )
 async def investigate_sample(params: InvestigateInput) -> str:
-    """Extract indicators from sample text and chain a VirusTotal lookup for each.
+    """Extract indicators from sample text and chain a reputation lookup for each.
 
     The chained capability behind the "auto-extract + chain" roadmap item: hand it a
     flagged sample's text and it extracts the indicators, looks each up sequentially
@@ -1085,21 +1130,35 @@ async def investigate_sample(params: InvestigateInput) -> str:
     errors -- set delay_seconds to pace them. A single indicator's 404/429/error
     becomes that row's "error" without sinking the rest.
 
+    By default each indicator is looked up on VirusTotal only. Set all_sources=True
+    to fan out across every configured source per indicator (the same fan-out as
+    lookup_indicator): each row then carries per-source verdicts and a consensus
+    instead of a single verdict, and the tally is derived from the consensus.
+
     Args:
         params (InvestigateInput): Validated input containing:
             - text (str): the sample text.
             - max_indicators (int): cap on lookups (default 10, max 25).
             - delay_seconds (float): pause between successive lookups (default 0,
               max 60); ~15 stays under the free-tier rate limit.
+            - all_sources (bool): fan out across all configured sources (default False).
 
     Returns:
         str: JSON with a "summary" tally, per-indicator "results" (each carrying a
-            "verdict" or an "error"), any "skipped" indicators beyond the cap, and a
-            "note". On a missing key, the single-line key-not-set message.
+            "verdict"/"error" in VT-only mode, or "sources"+"consensus" in
+            all_sources mode), any "skipped" indicators beyond the cap, and a
+            "note". On no configured source, the single-line key-not-set message.
     """
-    key_err = _require_key()
-    if key_err:
-        return key_err
+    if params.all_sources:
+        if not any(s.configured() for s in _SOURCES):
+            return (
+                "Error: no reputation source is configured. Set at least one source "
+                "key (e.g. VT_API_KEY or URLHAUS_API_KEY) to use all_sources."
+            )
+    else:
+        key_err = _require_key()
+        if key_err:
+            return key_err
 
     indicators = _extract_indicators(params.text)
     looked = indicators[: params.max_indicators]
@@ -1110,23 +1169,16 @@ async def investigate_sample(params: InvestigateInput) -> str:
     for i, ind in enumerate(looked):
         if i and params.delay_seconds:
             await asyncio.sleep(params.delay_seconds)
-        raw = await _dispatch_lookup(ind)
         row = {"indicator": ind["indicator"], "type": ind["type"]}
-        try:
-            verdict = json.loads(raw)
-        except ValueError:
-            row["error"] = raw
-            tally["not_found" if raw.startswith("Not found:") else "errors"] += 1
+        if params.all_sources:
+            envelope = await _fanout_lookup(ind["type"], ind["indicator"])
+            _tally_multi(row, envelope, tally)
         else:
-            row["verdict"] = verdict
-            if verdict.get("malicious", 0) > 0:
-                tally["malicious"] += 1
-            elif verdict.get("suspicious", 0) > 0:
-                tally["suspicious"] += 1
-            else:
-                tally["clean_or_unknown"] += 1
+            raw = await _dispatch_lookup(ind)
+            _tally_single(row, raw, tally)
         results.append(row)
 
+    scope = "across all configured sources" if params.all_sources else "on VirusTotal"
     report = {
         "summary": {
             "indicators_found": len(indicators),
@@ -1137,7 +1189,7 @@ async def investigate_sample(params: InvestigateInput) -> str:
         "results": results,
         "skipped": skipped,
         "note": (
-            f"Looked up {len(looked)} of {len(indicators)} indicators sequentially, "
+            f"Looked up {len(looked)} of {len(indicators)} indicators {scope} sequentially, "
             + (
                 f"paced {params.delay_seconds:g}s apart"
                 if params.delay_seconds

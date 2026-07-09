@@ -52,6 +52,7 @@ enrichment-mcp/
   test_cache.py       offline tests for the in-process TTL lookup cache
   test_multisource.py offline tests for the adapter layer + lookup_indicator envelope
   test_urlhaus.py     offline tests for the URLhaus source + its fan-out participation
+  test_investigate_multisource.py  offline tests for investigate_sample's all_sources mode
   conftest.py         autouse fixtures: clear the cache, unset source keys per test
   smoke_test.py       live stdio smoke test (works with or without a VT key)
   investigate_demo.py YARA flag -> investigate_sample chain, end to end

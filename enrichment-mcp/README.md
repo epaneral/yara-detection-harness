@@ -22,7 +22,7 @@ more reputation sources could slot in behind the same normalized verdict.
 | `vt_lookup_domain` | `domain` | normalized verdict |
 | `lookup_indicator` | `indicator`, `type` | multi-source envelope: each source's verdict + a consensus |
 | `extract_indicators` | `text` | URLs / IPs / domains in the text (no network) |
-| `investigate_sample` | `text`, `max_indicators`, `delay_seconds` | extract + chain a lookup per indicator → aggregated report |
+| `investigate_sample` | `text`, `max_indicators`, `delay_seconds`, `all_sources` | extract + chain a lookup per indicator → aggregated report (opt into multi-source fan-out with `all_sources`) |
 
 The four `vt_lookup_*` tools return the **same normalized shape** — the answer, not
 VirusTotal's raw 500-field blob:
@@ -107,6 +107,11 @@ Each result carries a `verdict` *or* an `error`, so one indicator's 404/429 neve
 the rest. Extraction pulls URLs, bare IPv4s, and email domains; a host inside a URL is not
 re-counted, and standalone bare-domain scanning is skipped (dotted code identifiers like
 `System.Net.WebClient` are indistinguishable from domains without a TLD list).
+
+Pass **`all_sources: true`** to fan out across *every* configured source per indicator
+(the `lookup_indicator` fan-out): each row then carries `sources` + `consensus` instead
+of a single `verdict`, and the summary tally is derived from each row's consensus. The
+default stays VirusTotal-only.
 
 **Defanged-corpus caveat:** the repo's corpus is synthetic — RFC 5737 `192.0.2.x`,
 `*.example.*`, fake tokens — so live lookups on it mostly return `not_found`. That is
@@ -295,7 +300,6 @@ Multi-source fan-out is **live** — the adapter interface, the fan-out envelope
 the `lookup_indicator` tool are in place with **VirusTotal and URLhaus** wired in
 (see [`multi-source-design.md`](multi-source-design.md)). Remaining:
 
-- An opt-in `sources` toggle on `investigate_sample` (fan out per indicator).
 - More source adapters behind the same interface: **urlscan**, then **Censys**.
 - A **formal eval suite**: an offline golden-file gate in CI, plus an opt-in live-key smoke script.
 - Durable cache **persistence** (the in-process TTL cache is in-memory only).
