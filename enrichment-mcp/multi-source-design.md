@@ -61,10 +61,10 @@ the others — the same per-row degradation `investigate_sample` already uses.
 
 | Source | Env key (free) | Kinds | Note |
 |---|---|---|---|
-| VirusTotal | `VT_API_KEY` | file/url/ip/domain | existing |
-| URLhaus (abuse.ch) | `URLHAUS_API_KEY` | url/ip/domain | read-only **POST** query; `Auth-Key` header (mandatory since 2025-06-30) |
-| urlscan.io | `URLSCAN_API_KEY` | url/domain | GET |
-| Censys | `CENSYS_API_ID` / `CENSYS_API_SECRET` | ip/domain | GET, heavier |
+| VirusTotal | `VT_API_KEY` | file/url/ip/domain | wired in |
+| URLhaus (abuse.ch) | `URLHAUS_API_KEY` | url/ip/domain | wired in — read-only **POST** query; `Auth-Key` header (mandatory since 2025-06-30) |
+| urlscan.io | `URLSCAN_API_KEY` | url/ip/domain | wired in — GET search existing scans → read top result's verdict; `API-Key` header |
+| Censys | `CENSYS_API_ID` / `CENSYS_API_SECRET` | ip/domain | GET, heavier — **note:** returns host data, not a malicious verdict (see rollout) |
 
 A source with no key is **skipped**, so the server still runs with just VT — as today.
 
@@ -92,5 +92,5 @@ Two layers, mirroring the repo's existing `pytest`-vs-`smoke_test.py` split:
 2. ~~**URLhaus adapter** behind the interface (+ key/skip handling + the read-only wording).~~ ✅ done
 3. ~~**`investigate_sample` `all_sources` toggle** — fan out per indicator.~~ ✅ done
 4. ~~**Eval suite** (offline golden-file gate + opt-in `eval_live.py`).~~ ✅ done
-5. **urlscan adapter.**
+5. ~~**urlscan adapter** (search existing scans -> read the top result's verdict).~~ ✅ done
 6. **Censys adapter.**

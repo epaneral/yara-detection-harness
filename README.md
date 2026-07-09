@@ -44,7 +44,7 @@ tests/
   test_rules.py the harness
   test_rule_conventions.py  plyara-based rule-convention checks (house style)
 enrichment-mcp/
-  server.py           enrichment MCP server: VirusTotal + URLhaus (separate component, own deps)
+  server.py           enrichment MCP server: VirusTotal + URLhaus + urlscan (separate component, own deps)
   multi-source-design.md  design note: multi-source fan-out + eval roadmap
   test_server.py      unit tests for its pure logic (validation, encoding, normalize)
   test_tools.py       offline tests driving the vt_lookup_* tools, network stubbed
@@ -52,6 +52,7 @@ enrichment-mcp/
   test_cache.py       offline tests for the in-process TTL lookup cache
   test_multisource.py offline tests for the adapter layer + lookup_indicator envelope
   test_urlhaus.py     offline tests for the URLhaus source + its fan-out participation
+  test_urlscan.py     offline tests for the urlscan.io source (search -> result verdict)
   test_investigate_multisource.py  offline tests for investigate_sample's all_sources mode
   conftest.py         autouse fixtures: clear the cache, unset source keys per test
   eval_cases.py       labeled scenarios for the pipeline eval (corpus-derived)
