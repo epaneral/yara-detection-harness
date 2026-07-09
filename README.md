@@ -234,12 +234,12 @@ Rules are written with YARA's matching engine in mind, not just correctness:
   corpus authoring: sample header comments must describe their near-miss without quoting
   the rule's atoms — the FP gate enforces this.
 
-## Roadmap (not built yet — phase 2)
+## Phase 2 — shipped
 
-Deliberately out of the current scope to keep it shippable:
-
-- Two-path ingestion: one scraped static source + one structured feed.
-- A retro-hunt job running new rules over the stored corpus.
+The phase-2 roadmap is complete: two-path IOC ingestion (`ingestion/`), a retro-hunt
+tool (`tests/retrohunt.py`), the `yaraqa` + `plyara` rule-quality gates, fully-resolved
+hashed dependency locks, and the enrichment layer's multi-source fan-out + eval suite
+(`enrichment-mcp/`). See each component's README for details.
 
 ## What this is not
 
