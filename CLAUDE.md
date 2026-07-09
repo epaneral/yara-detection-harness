@@ -53,6 +53,10 @@ branch protection requires; a skipped needed job fails it on purpose.
   The `yaraqa` CI job gates rule quality: new level-≥2 yaraQA issues fail the build unless
   they're already in the reviewed baseline `tests/yaraqa-baseline.json` — add deliberately-accepted
   issues (short atoms, `ascii`+`wide`+`nocase` modifiers, the `-enc` abbreviation regex) there.
+  Beyond that generic gate, a `plyara`-based convention suite (`tests/test_rule_conventions.py`,
+  in the `harness` pytest job) parses each rule's source and enforces the house style — a complete
+  `meta` block, well-formed MITRE `attack` IDs, a controlled `severity` vocabulary, atom-anchored
+  regex (no leading `.*`), and the `>=2`-string (two-primitive) floor — parametrized over every rule.
 - **enrichment-mcp/** — self-contained VirusTotal MCP server (`server.py`, stdio, read-only
   reputation lookups (hash/URL/IP/domain) plus extract/investigate tools, normalized verdict
   shape). Separate deps; not run by the bare `pytest`. `VT_API_KEY`

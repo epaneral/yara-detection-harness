@@ -42,6 +42,7 @@ corpus/
 tests/
   manifest.yml  ground-truth labels + expected matches (single source of truth)
   test_rules.py the harness
+  test_rule_conventions.py  plyara-based rule-convention checks (house style)
 enrichment-mcp/
   server.py           VirusTotal enrichment MCP server (separate component, own deps)
   test_server.py      unit tests for its pure logic (validation, encoding, normalize)
@@ -88,6 +89,13 @@ its label there and it's automatically covered. Four gates:
 4. **Manifest/ruleset integrity** — the manifest and rules stay in sync: no orphan rule
    (defined but exercised by no sample), no `expected_rules` naming a non-existent rule,
    and every referenced sample path exists.
+
+The `harness` job also runs a `plyara`-based **rule-convention** suite
+(`tests/test_rule_conventions.py`) that parses each rule's source and enforces this repo's
+house style: a complete `meta` block, well-formed MITRE `attack` technique IDs, a controlled
+`severity` vocabulary, atom-anchored regex (no leading `.*`), and the two-primitive floor. It's
+the house-style complement to the generic `yaraqa` gate, parametrized over every rule so a new
+rule is covered automatically.
 
 ```bash
 pip install -r requirements.txt
@@ -198,7 +206,6 @@ Rules are written with YARA's matching engine in mind, not just correctness:
 
 Deliberately out of the current scope to keep it shippable:
 
-- Custom `plyara`-based checks beyond the yaraQA gate.
 - Two-path ingestion: one scraped static source + one structured feed.
 - A retro-hunt job running new rules over the stored corpus.
 

@@ -16,6 +16,10 @@ pluggy==1.6.0 \
     --hash=sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3 \
     --hash=sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746
     # via pytest
+plyara==2.2.8 \
+    --hash=sha256:8b2a3b46c0963976010a69d3ddd280a77dcd6cf1097408ff573b5af5df04d06d \
+    --hash=sha256:ce6a5be6bdc172f78bb10d2e220409c76bd46b3da9ff43e53bbe84d1eede9700
+    # via -r requirements.txt
 pygments==2.20.0 \
     --hash=sha256:6757cd03768053ff99f3039c1a36d6c0aa0b263438fcab17520b30a303a82b5f \
     --hash=sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176
