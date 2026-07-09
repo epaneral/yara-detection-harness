@@ -330,12 +330,17 @@ run) reuses the stored verdict instead of re-hitting VirusTotal. Errors are neve
 
 ## Roadmap
 
-Multi-source fan-out is **live** — the adapter interface, the fan-out envelope, the
-`lookup_indicator` tool (with **VirusTotal, URLhaus, urlscan.io, and AbuseIPDB** wired
-in), and the [eval suite](#eval) are all in place (see
-[`multi-source-design.md`](multi-source-design.md)). Remaining:
+The multi-source rollout is **complete** — the adapter interface, the fan-out
+envelope, the `lookup_indicator` tool (with **VirusTotal, URLhaus, urlscan.io, and
+AbuseIPDB** wired in), and the [eval suite](#eval) are all in place (see
+[`multi-source-design.md`](multi-source-design.md)).
 
-- Durable cache **persistence** (the in-process TTL cache is in-memory only).
+Two things were deliberately **considered and not built**:
 
-(Censys was considered as a source but dropped — its API returns host/attack-surface
-data, not a malicious verdict, so AbuseIPDB fills the IP-reputation slot instead.)
+- **Censys** as a source — its API returns host/attack-surface data, not a malicious
+  verdict, so it can't produce a reputation verdict for the consensus; AbuseIPDB fills
+  the IP-reputation slot instead.
+- **Durable cache persistence** — reputation is time-sensitive, so verdicts shouldn't
+  outlive the process; the short-TTL in-memory cache is the intended design (persisting
+  to disk would push toward staler verdicts, add concurrency/I-O complexity, and record
+  a durable trail of every indicator looked up, for little cross-session gain).

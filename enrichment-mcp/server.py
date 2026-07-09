@@ -22,10 +22,12 @@ Design notes:
     usual one-line error.
   - Successful lookups are served through a small in-process TTL cache, so
     repeated indicators (including across an investigate_sample run) do not
-    re-hit VirusTotal.
+    re-hit VirusTotal. The cache is intentionally in-memory only: reputation is
+    time-sensitive, so verdicts should not outlive the process (see README.md).
 
-Scope fence (deliberately NOT built here yet): durable cache persistence. See
-README.md "Roadmap" and multi-source-design.md for that.
+The multi-source rollout is complete (VirusTotal / URLhaus / urlscan / AbuseIPDB
++ the eval suite). Durable cache persistence was considered and deliberately not
+built -- see README.md "Roadmap" and multi-source-design.md for the reasoning.
 """
 
 import asyncio
