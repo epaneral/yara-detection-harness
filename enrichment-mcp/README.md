@@ -20,6 +20,7 @@ more reputation sources could slot in behind the same normalized verdict.
 | `vt_lookup_url` | `url` (incl. scheme) | normalized verdict |
 | `vt_lookup_ip_address` | `ip` (IPv4) | normalized verdict |
 | `vt_lookup_domain` | `domain` | normalized verdict |
+| `lookup_indicator` | `indicator`, `type` | multi-source envelope: each source's verdict + a consensus |
 | `extract_indicators` | `text` | URLs / IPs / domains in the text (no network) |
 | `investigate_sample` | `text`, `max_indicators`, `delay_seconds` | extract + chain a lookup per indicator → aggregated report |
 
@@ -40,8 +41,38 @@ VirusTotal's raw 500-field blob:
 }
 ```
 
-All tools are **read-only**: the lookups are GET-only (nothing is submitted,
-modified, or deleted), and `extract_indicators` makes no network call at all.
+All tools are **read-only**: the lookups only *query* reputation (nothing is
+submitted, modified, or deleted), and `extract_indicators` makes no network call
+at all.
+
+## Multi-source lookup
+
+`lookup_indicator` is the multi-source front door: give it one `indicator` + its
+`type` and it fans out across every configured reputation source, returning an
+**envelope** — each source's verdict under the *same* normalized shape above, plus
+a `consensus`:
+
+```json
+{
+  "indicator": "192.0.2.44",
+  "type": "ip_address",
+  "sources": { "virustotal": { ...normalized verdict... } },
+  "consensus": {
+    "malicious": true, "suspicious": false,
+    "sources_malicious": ["virustotal"], "sources_suspicious": [],
+    "max_malicious": 3,
+    "sources_completed": ["virustotal"], "sources_skipped": [], "sources_errored": []
+  }
+}
+```
+
+Counts are **never merged** across sources (VirusTotal engines and, say, URLhaus
+blacklists aren't comparable) — `consensus` only summarizes: which sources called it
+malicious/suspicious, the `max` malicious count seen (not a sum), and which sources
+completed, were skipped (no key), or errored. A source with no API key is silently
+skipped, and one source's error never sinks the others. Today VirusTotal is the only
+wired-in source; more slot in behind the same interface. See
+[`multi-source-design.md`](multi-source-design.md) for the full design and rollout.
 
 ## Chained investigation
 
@@ -189,7 +220,7 @@ Expected output (with a key):
 
 ```
 connected to 'virustotal_mcp'
-tools: vt_lookup_file_hash, vt_lookup_url, vt_lookup_ip_address, vt_lookup_domain, extract_indicators, investigate_sample
+tools: vt_lookup_file_hash, vt_lookup_url, vt_lookup_ip_address, vt_lookup_domain, lookup_indicator, extract_indicators, investigate_sample
 
 looking up EICAR hash 275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f ...
 {
@@ -242,8 +273,12 @@ run) reuses the stored verdict instead of re-hitting VirusTotal. Errors are neve
 - **Read-only.** Only reputation *lookups*; no submission or mutation endpoints.
 - **Rate-limited by design** on the free tier — handled gracefully (see above).
 
-## Roadmap (deliberately out of scope here)
+## Roadmap
 
-- Multi-source fan-out (e.g. URLhaus, Censys, urlscan) behind the same verdict shape.
-- Durable cache **persistence** (the in-process TTL cache above is in-memory only) and
-  a formal evaluation suite.
+Multi-source fan-out is **in progress** — the adapter interface, the fan-out
+envelope, and the `lookup_indicator` tool are in place with VirusTotal as the first
+source (see [`multi-source-design.md`](multi-source-design.md)). Remaining:
+
+- Additional source adapters behind the same interface: **URLhaus**, then **urlscan**, then **Censys**.
+- A **formal eval suite**: an offline golden-file gate in CI, plus an opt-in live-key smoke script.
+- Durable cache **persistence** (the in-process TTL cache is in-memory only).
