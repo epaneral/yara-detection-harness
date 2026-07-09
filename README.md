@@ -54,6 +54,10 @@ enrichment-mcp/
   test_urlhaus.py     offline tests for the URLhaus source + its fan-out participation
   test_investigate_multisource.py  offline tests for investigate_sample's all_sources mode
   conftest.py         autouse fixtures: clear the cache, unset source keys per test
+  eval_cases.py       labeled scenarios for the pipeline eval (corpus-derived)
+  eval_harness.py     offline eval: extraction + verdict/shape metrics (report + gate)
+  test_eval.py        CI gate asserting the eval metrics meet thresholds
+  eval_live.py        opt-in live-key eval: loose invariants against the real APIs
   smoke_test.py       live stdio smoke test (works with or without a VT key)
   investigate_demo.py YARA flag -> investigate_sample chain, end to end
 .mcp.json     project-scoped MCP config (Claude Code auto-discovers the server)

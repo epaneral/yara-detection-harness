@@ -263,6 +263,31 @@ test hash).
 
 ![The normalized VirusTotal verdict returned in Claude Desktop](../docs/enrichment-vt-verdict.png)
 
+## Eval
+
+A small **eval suite** measures the *pipeline* (extract → per-source lookup →
+normalize → consensus), in two layers:
+
+- **Offline, the CI gate** — `eval_cases.py` holds labeled scenarios derived from the
+  corpus families (sample text → ground-truth indicators + a per-source golden
+  reputation label). `eval_harness.py` runs extraction precision/recall and
+  verdict/shape conformance with both sources stubbed (deterministic, no key, no
+  network); `test_eval.py` fails the build if any metric drops below threshold. It
+  runs as part of `pytest enrichment-mcp`, so it gates every PR. See the report with:
+
+  ```bash
+  python enrichment-mcp/eval_harness.py
+  ```
+
+- **Live, opt-in** — `eval_live.py` makes real calls and checks a few *loose
+  invariants* (EICAR is malicious, a major domain is not, every verdict conforms to
+  the shape). It needs a key, drifts over time, and is **never a CI gate** (the eval
+  analog of `smoke_test.py`):
+
+  ```bash
+  python enrichment-mcp/eval_live.py   # skips cleanly if no key is set
+  ```
+
 ## Error handling
 
 Every failure mode returns a single actionable line, never a stack trace:
@@ -296,10 +321,10 @@ run) reuses the stored verdict instead of re-hitting VirusTotal. Errors are neve
 
 ## Roadmap
 
-Multi-source fan-out is **live** — the adapter interface, the fan-out envelope, and
-the `lookup_indicator` tool are in place with **VirusTotal and URLhaus** wired in
-(see [`multi-source-design.md`](multi-source-design.md)). Remaining:
+Multi-source fan-out is **live** — the adapter interface, the fan-out envelope, the
+`lookup_indicator` tool (with **VirusTotal and URLhaus** wired in), and the
+[eval suite](#eval) are all in place (see [`multi-source-design.md`](multi-source-design.md)).
+Remaining:
 
 - More source adapters behind the same interface: **urlscan**, then **Censys**.
-- A **formal eval suite**: an offline golden-file gate in CI, plus an opt-in live-key smoke script.
 - Durable cache **persistence** (the in-process TTL cache is in-memory only).
