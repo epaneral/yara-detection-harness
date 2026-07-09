@@ -10,9 +10,11 @@ can call mid-investigation, returning a *normalized* verdict for an indicator
 (a file hash, URL, IP, or domain) instead of VirusTotal's full raw report.
 
 Design notes:
-  - Read-only. Only GET lookups; nothing here submits, mutates, or deletes.
-  - One source now (VirusTotal), but the tool interface is built so additional
-    reputation sources could slot in behind the same normalized verdict shape.
+  - Read-only. Reputation lookups only -- nothing here submits, mutates, or deletes.
+  - Sources sit behind a small adapter interface (ReputationSource). VirusTotal is
+    the first, and the lookup_indicator tool fans out across every configured
+    source, returning each one's verdict under the SAME normalized shape plus a
+    combined consensus. More sources slot in without changing that shape.
   - API key is read from the VT_API_KEY environment variable, never hardcoded.
   - Local stdio transport: launched as a subprocess by an MCP client.
   - One pooled HTTP client is reused across lookups (closed on shutdown), and a
@@ -22,8 +24,9 @@ Design notes:
     repeated indicators (including across an investigate_sample run) do not
     re-hit VirusTotal.
 
-Scope fence (deliberately NOT built here): multi-source fan-out, durable cache
-persistence, and a formal eval suite. See README.md "Roadmap" for those.
+Scope fence (deliberately NOT built here yet): additional sources beyond
+VirusTotal (URLhaus/urlscan/Censys), durable cache persistence, and a formal eval
+suite. See README.md "Roadmap" and multi-source-design.md for those.
 """
 
 import asyncio
@@ -35,10 +38,11 @@ import re
 import time
 from collections import OrderedDict
 from contextlib import asynccontextmanager
+from typing import Literal
 
 import httpx
 from mcp.server.fastmcp import FastMCP
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 # Optional convenience: auto-load a local .env when present (e.g. for Inspector
 # testing). The server works fine with a plain VT_API_KEY env var without this.
@@ -265,6 +269,47 @@ class InvestigateInput(BaseModel):
         ge=0.0,
         le=60.0,
     )
+
+
+# Maps an indicator kind to the existing typed input model (and its field) that
+# validates and normalizes it, so lookup_indicator reuses the exact same rules as
+# the vt_lookup_* tools instead of duplicating them.
+_KIND_INPUT = {
+    "file": (HashLookupInput, "file_hash"),
+    "url": (UrlLookupInput, "url"),
+    "ip_address": (IpLookupInput, "ip"),
+    "domain": (DomainLookupInput, "domain"),
+}
+
+
+class IndicatorLookupInput(BaseModel):
+    """Input for a multi-source lookup of a single indicator of any of the four kinds."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    indicator: str = Field(
+        ...,
+        description="The indicator value: file hash, URL (incl. scheme), IPv4, or domain",
+        min_length=1,
+        max_length=2048,
+    )
+    type: Literal["file", "url", "ip_address", "domain"] = Field(
+        ...,
+        description="Indicator kind: 'file' (hash), 'url', 'ip_address', or 'domain'",
+    )
+
+    @model_validator(mode="after")
+    def _validate_indicator_for_type(self) -> "IndicatorLookupInput":
+        # Delegate to the matching typed model so the value is validated and
+        # normalized identically to the single-source tools (e.g. lowercased hash).
+        model_cls, field = _KIND_INPUT[self.type]
+        try:
+            validated = model_cls(**{field: self.indicator})
+        except ValidationError as err:
+            msg = err.errors()[0].get("msg", "invalid indicator")
+            raise ValueError(f"invalid {self.type} indicator: {msg}") from err
+        self.indicator = getattr(validated, field)
+        return self
 
 
 # --- Shared helpers --------------------------------------------------------
@@ -534,6 +579,140 @@ async def _dispatch_lookup(indicator: dict) -> str:
     return f"Error: unknown indicator type '{kind}'"
 
 
+# --- Reputation sources (adapter layer for multi-source fan-out) ------------
+class ReputationSource:
+    """Interface every reputation source implements so the fan-out treats them
+    uniformly. A source answers a supported indicator kind with the normalized
+    verdict shape (a JSON string) or an actionable error line -- the same
+    contract the per-indicator lookups above already honor.
+    """
+
+    name: str = ""
+
+    def supports(self, kind: str) -> bool:
+        """Whether this source can answer the given indicator kind."""
+        raise NotImplementedError
+
+    def configured(self) -> bool:
+        """Whether this source has the credentials it needs (else it's skipped)."""
+        raise NotImplementedError
+
+    async def lookup(self, kind: str, value: str) -> str:
+        """Return the normalized verdict JSON, or an actionable error line."""
+        raise NotImplementedError
+
+
+class VirusTotalSource(ReputationSource):
+    """VirusTotal adapter -- the first (and today only) source. It wraps the
+    existing per-kind VT lookups unchanged; more sources slot in behind this
+    same interface without touching it or the normalized verdict shape.
+    """
+
+    name = "virustotal"
+
+    def supports(self, kind: str) -> bool:
+        return kind in ("file", "url", "ip_address", "domain")
+
+    def configured(self) -> bool:
+        return bool(VT_API_KEY)
+
+    async def lookup(self, kind: str, value: str) -> str:
+        if kind == "file":
+            return await _lookup_file(value)
+        if kind == "url":
+            return await _lookup_url(value)
+        if kind == "ip_address":
+            return await _lookup_ip(value)
+        if kind == "domain":
+            return await _lookup_domain(value)
+        return f"Error: unknown indicator type '{kind}'"
+
+
+# The source registry the fan-out iterates; order here is the display order in
+# the envelope's per-source map. New sources are appended.
+_SOURCES: list[ReputationSource] = [VirusTotalSource()]
+
+
+def _sources_for(kind: str) -> tuple[list[ReputationSource], list[str]]:
+    """Partition the sources that support `kind` into (configured, skipped-names)."""
+    supporting = [s for s in _SOURCES if s.supports(kind)]
+    active = [s for s in supporting if s.configured()]
+    skipped = [s.name for s in supporting if not s.configured()]
+    return active, skipped
+
+
+def _no_source_configured(kind: str) -> str:
+    """Actionable one-line message when no configured source can answer `kind`."""
+    # Only VirusTotal exists today, so a missing key is the cause; _require_key's
+    # message names the env var and where to get a key. Generalizes as sources grow.
+    key_err = _require_key()
+    if key_err:
+        return key_err
+    return f"Error: no configured reputation source supports '{kind}' indicators."
+
+
+def _classify_source_result(raw: str) -> dict:
+    """Map a source's raw return into its envelope entry: a parsed verdict, a
+    not-found marker, or an error marker (mirrors investigate_sample's row rule).
+    """
+    try:
+        return json.loads(raw)
+    except ValueError:
+        if raw.startswith("Not found:"):
+            return {"not_found": raw}
+        return {"error": raw}
+
+
+def _build_consensus(sources: dict, skipped: list[str]) -> dict:
+    """Summarize per-source verdicts WITHOUT merging incomparable counts.
+
+    Reports booleans plus rosters (which sources called it malicious/suspicious),
+    the max malicious count seen (a severity hint, never a sum across sources),
+    and which sources completed, were skipped (unconfigured), or errored.
+    """
+    malicious, suspicious, completed, errored = [], [], [], []
+    max_malicious = 0
+    for name, entry in sources.items():
+        if "error" in entry:
+            errored.append(name)
+            continue
+        completed.append(name)  # a verdict or a not-found both mean the source answered
+        mal = entry.get("malicious", 0) or 0
+        sus = entry.get("suspicious", 0) or 0
+        if mal > 0:
+            malicious.append(name)
+            max_malicious = max(max_malicious, mal)
+        if sus > 0:
+            suspicious.append(name)
+    return {
+        "malicious": bool(malicious),
+        "suspicious": bool(suspicious),
+        "sources_malicious": sorted(malicious),
+        "sources_suspicious": sorted(suspicious),
+        "max_malicious": max_malicious,
+        "sources_completed": sorted(completed),
+        "sources_skipped": sorted(skipped),
+        "sources_errored": sorted(errored),
+    }
+
+
+async def _fanout_lookup(kind: str, value: str) -> dict:
+    """Query every configured source that supports `kind` concurrently and build
+    the multi-source envelope (per-source verdicts + a consensus).
+    """
+    active, skipped = _sources_for(kind)
+    results = await asyncio.gather(*(s.lookup(kind, value) for s in active))
+    sources = {
+        src.name: _classify_source_result(raw) for src, raw in zip(active, results, strict=True)
+    }
+    return {
+        "indicator": value,
+        "type": kind,
+        "sources": sources,
+        "consensus": _build_consensus(sources, skipped),
+    }
+
+
 # --- Tools -----------------------------------------------------------------
 @mcp.tool(
     name="vt_lookup_file_hash",
@@ -658,6 +837,64 @@ async def vt_lookup_domain(params: DomainLookupInput) -> str:
             single-line "Error: ..." or "Not found: ..." message.
     """
     return await _lookup_domain(params.domain)
+
+
+@mcp.tool(
+    name="lookup_indicator",
+    annotations={
+        "title": "Multi-Source Indicator Reputation",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+)
+async def lookup_indicator(params: IndicatorLookupInput) -> str:
+    """Look up one indicator across every configured reputation source and return a
+    combined envelope: each source's normalized verdict plus a consensus.
+
+    Use this when you want more than one source's opinion on an indicator. Today
+    only VirusTotal is wired in, so the envelope carries a single source; as more
+    sources are added they appear alongside it under the SAME per-source verdict
+    shape the vt_lookup_* tools return. Counts are never merged across sources
+    (they aren't comparable) -- only summarized in `consensus`.
+
+    A source with no API key is silently skipped (named in
+    `consensus.sources_skipped`), and a per-source error becomes that source's
+    `error` entry without sinking the others. If no configured source can answer
+    the given kind, a single actionable line is returned instead.
+
+    Args:
+        params (IndicatorLookupInput): Validated input containing:
+            - indicator (str): the value (hash, URL incl. scheme, IPv4, or domain).
+            - type (str): 'file', 'url', 'ip_address', or 'domain'.
+
+    Returns:
+        str: On success, a JSON envelope:
+            {
+                "indicator": str,
+                "type": str,
+                "sources": {
+                    "<name>": <verdict> | {"error": str} | {"not_found": str}, ...
+                },
+                "consensus": {
+                    "malicious": bool,              # any source with malicious > 0
+                    "suspicious": bool,             # any source with suspicious > 0
+                    "sources_malicious": [str, ...],
+                    "sources_suspicious": [str, ...],
+                    "max_malicious": int,           # max across sources, never a sum
+                    "sources_completed": [str, ...],
+                    "sources_skipped": [str, ...],  # not configured (no key)
+                    "sources_errored": [str, ...]
+                }
+            }
+        On no configured source for the kind, a single-line "Error: ..." message.
+    """
+    kind, value = params.type, params.indicator
+    active, _skipped = _sources_for(kind)
+    if not active:
+        return _no_source_configured(kind)
+    return json.dumps(await _fanout_lookup(kind, value), indent=2)
 
 
 @mcp.tool(
