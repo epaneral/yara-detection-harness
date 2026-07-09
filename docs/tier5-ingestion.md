@@ -1,6 +1,6 @@
 # Tier 5 — Two-path IOC ingestion (design note)
 
-Status: **accepted, not yet built**. Reference for the `ingestion/` component work
+Status: **shipped** (all three PRs merged). Reference for the `ingestion/` component
 (roadmap "Two-path ingestion: one scraped static source + one structured feed").
 
 ## Goal
@@ -79,11 +79,15 @@ one actionable line, never a stack trace. ruff-clean.
 
 ## Phasing
 
-- **PR1** — component skeleton: record, JSONL store, structured-feed adapter, synthetic
-  fixtures, CI job + lock, README.
-- **PR2** — scraped-source adapter (bs4 + defang extraction) + tests.
-- **PR3** — enrich bridge: a CLI command that drives the enrichment-mcp server over
-  stdio to batch-look-up the ingested set (extract → ingest → enrich, end to end).
+All three shipped:
+
+- **PR1** (#33) — component skeleton: record, JSONL store, structured-feed adapter,
+  synthetic fixtures, CI job + lock, README.
+- **PR2** (#37) — scraped-source adapter (bs4 + defang-aware extraction) + tests.
+- **PR3** — enrich bridge: `python -m ingestion.enrich` drives the enrichment-mcp server
+  over stdio, looking each stored indicator up via `lookup_indicator` (fan-out across
+  every configured source). The aggregation core is offline-tested with a stubbed
+  `call_tool`; the `mcp` import is lazy so CI needs no server deps.
 
 ## Not this: retro-hunt
 
