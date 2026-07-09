@@ -1,7 +1,8 @@
 # Multi-source reputation fan-out — design note
 
 How this server grows from one reputation source (VirusTotal) to several
-(URLhaus, urlscan, Censys) **behind the same normalized verdict shape**, plus the
+(URLhaus, urlscan, AbuseIPDB — the latter replacing the originally planned Censys,
+see the rollout table) **behind the same normalized verdict shape**, plus the
 eval approach. This is the design the rollout PRs implement; it captures decisions
 made in review so they don't have to be re-derived.
 

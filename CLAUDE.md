@@ -27,9 +27,10 @@ python yaraQA/yaraQA.py -d rules/ --ignore-performance -b tests/yaraqa-baseline.
 
 The `requirements.txt` files are the hand-edited direct-pin sources (fine for local
 installs). CI instead installs from fully-resolved, hashed lock files — `requirements.lock`,
-`enrichment-mcp/requirements-dev.lock`, and `requirements-yaraqa.lock` — so transitive deps
-don't float. Regenerate the matching lock after editing a pin (command is in each lock's
-header): `uv pip compile <src> -o <lock> --universal --generate-hashes`.
+`enrichment-mcp/requirements-dev.lock`, `ingestion/requirements-dev.lock`, and
+`requirements-yaraqa.lock` — so transitive deps don't float. Regenerate the matching lock
+after editing a pin (command is in each lock's header):
+`uv pip compile <src> -o <lock> --universal --generate-hashes`.
 
 CI = `lint` + `harness` + `enrichment-mcp` + `yaraqa` + `ingestion` jobs, plus an `all-green`
 aggregate that branch protection requires; a skipped needed job fails it on purpose.
@@ -62,7 +63,8 @@ aggregate that branch protection requires; a skipped needed job fails it on purp
   in the `harness` pytest job) parses each rule's source and enforces the house style — a complete
   `meta` block, well-formed MITRE `attack` IDs, a controlled `severity` vocabulary, atom-anchored
   regex (no leading `.*`), and the `>=2`-string (two-primitive) floor — parametrized over every rule.
-- **enrichment-mcp/** — self-contained VirusTotal MCP server (`server.py`, stdio, read-only
-  reputation lookups (hash/URL/IP/domain) plus extract/investigate tools, normalized verdict
-  shape). Separate deps; not run by the bare `pytest`. `VT_API_KEY`
-  from env; failures return one actionable line, never a stack trace.
+- **enrichment-mcp/** — self-contained multi-source reputation MCP server (`server.py`, stdio,
+  read-only lookups (hash/URL/IP/domain) across VirusTotal, URLhaus, urlscan.io, and AbuseIPDB,
+  plus extract/investigate tools, one normalized verdict shape). Separate deps; not run by the
+  bare `pytest`. Per-source API keys from env (`VT_API_KEY` etc.); failures return one
+  actionable line, never a stack trace.
