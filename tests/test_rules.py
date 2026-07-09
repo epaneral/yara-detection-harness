@@ -16,37 +16,19 @@ The manifest is the single source of truth: add a sample there and it is
 automatically covered.
 """
 
-import pathlib
-
 import pytest
-import yaml
 import yara
-
-REPO = pathlib.Path(__file__).resolve().parents[1]
-RULES_DIR = REPO / "rules"
-MANIFEST = REPO / "tests" / "manifest.yml"
+from ruleset import REPO, RULES_DIR, compile_ruleset, load_manifest, matches_for
 
 # Build gate: fraction of benign samples allowed to match any rule.
 # Held at 0.0 for the skeleton - any false positive fails CI.
 FP_THRESHOLD = 0.0
 
 
-def load_manifest():
-    data = yaml.safe_load(MANIFEST.read_text())
-    return data["samples"]
-
-
 @pytest.fixture(scope="session")
 def rules():
     """Compile every rule file into one namespaced ruleset, once per run."""
-    filepaths = {p.stem: str(p) for p in sorted(RULES_DIR.glob("*.yar"))}
-    assert filepaths, "no .yar files found under rules/"
-    return yara.compile(filepaths=filepaths)
-
-
-def matches_for(rules, sample_path):
-    data = (REPO / sample_path).read_bytes()
-    return sorted(m.rule for m in rules.match(data=data))
+    return compile_ruleset()
 
 
 SAMPLES = load_manifest()

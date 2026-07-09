@@ -51,6 +51,9 @@ jobs:
       # resolving to something new.
       - run: pip install -r requirements.lock
       - run: pytest -v
+      # Non-blocking retro-hunt: print the ruleset's corpus coverage map on every run
+      # (informational -- the tool exits 0 on findings; see tests/retrohunt.py).
+      - run: python tests/retrohunt.py
 
   # Enrichment MCP server: unit tests over its pure logic. Importing the module
   # under test also supersedes the old compileall syntax-check.
