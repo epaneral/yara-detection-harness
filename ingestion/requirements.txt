@@ -4,4 +4,4 @@
 # edit with (command also in the lock header):
 #   uv pip compile ingestion/requirements-dev.txt -o ingestion/requirements-dev.lock --universal --generate-hashes
 httpx==0.28.1
-# PR2 adds beautifulsoup4 here for the scraped-source adapter.
+beautifulsoup4==4.15.0   # scraped-source adapter: strip HTML to text before extraction

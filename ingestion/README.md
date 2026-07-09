@@ -6,6 +6,11 @@ CLI-driven and run-to-completion — a batch *collection* job, deliberately
 independent of the enrichment MCP server one level up (that's the read-only
 *lookup* layer; this one *writes*).
 
+Two adapters surface those indicators: the **structured feed** (a JSON array of
+typed IOC objects) and the **scraped source** (an HTML/text page mined for IOCs).
+Either or both can run in a single invocation; their results are merged and
+deduped into the same store.
+
 > Self-contained: its own component, exercised by its own tests. All committed
 > fixtures are synthetic and defanged (RFC 5737 IPs, `*.example`, fake hashes),
 > and the tests + CI run fully offline.
@@ -18,7 +23,7 @@ Every source normalizes to one `Indicator`, deduped by `(type, indicator)`:
 |---|---|
 | `indicator` | the IOC string (URL, IP, domain, or file hash) |
 | `type` | one of `url`, `ip_address`, `domain`, `file_hash` |
-| `source` | which adapter surfaced it (`feed`) |
+| `source` | which adapter surfaced it (`feed` or `scrape`) |
 | `source_ref` | where it came from (the feed path or URL) |
 | `tags` | free-form labels, e.g. `["c2", "phishing"]` |
 
@@ -38,17 +43,30 @@ The structured-feed adapter reads a JSON array of typed IOC objects.
 A malformed feed (not JSON, not a top-level array, a row missing a required
 field, or a bad `type`) raises one actionable error rather than a stack trace.
 
+## Scraped source
+
+The scraped-source adapter mines an HTML/text page (advisory, paste dump) for
+IOCs. It strips the HTML to visible text and is **defang-aware**, refanging the
+common forms (`hxxp`, `[.]`, `(dot)`, `[:]`) before extracting URLs, IPs, file
+hashes, and domains. Bare domains are taken **only when they were defanged** in
+the source (or appear as a URL host / email domain), so incidental filenames
+(`install.sh`) and non-defanged domains (`static.rust-lang.org`) aren't picked
+up as indicators.
+
 ## Usage
 
 ```bash
 python -m ingestion.cli --feed ingestion/fixtures/feed.json
+python -m ingestion.cli --scrape ingestion/fixtures/scrape.html
 python -m ingestion.cli --feed https://example.org/feed.json --store path/to/store.jsonl
 ```
 
-`--feed` is required. `--store` defaults to `ingestion/store/indicators.jsonl`.
-The committed fixture is a local file so the demo stays offline; a **real run**
-points `--feed` at an `http(s)` URL. Known failures (bad source, malformed feed)
-print `error: ...` to stderr and exit 1.
+At least one of `--feed` / `--scrape` is required, and they can be **combined**
+in one run — their results merge and dedup into the same store. `--store`
+defaults to `ingestion/store/indicators.jsonl`. The committed fixtures are local
+files so the demo stays offline; a **real run** points `--feed`/`--scrape` at an
+`http(s)` URL. Known failures (bad source, malformed feed) print `error: ...` to
+stderr and exit 1.
 
 ## Store
 
@@ -68,6 +86,6 @@ Offline — the tests parse the committed fixture and write only to a temp store
 
 ## Roadmap
 
-PR1 (this) ships the structured-feed adapter. The scraped-source adapter (PR2)
-and an enrich bridge to the MCP server over stdio (PR3) follow. See
-[`docs/tier5-ingestion.md`](../docs/tier5-ingestion.md) for the full design.
+PR1 shipped the structured-feed adapter and PR2 the scraped-source adapter (both
+now in place). Only the enrich bridge to the MCP server over stdio (PR3) remains.
+See [`docs/tier5-ingestion.md`](../docs/tier5-ingestion.md) for the full design.

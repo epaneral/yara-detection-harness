@@ -64,9 +64,9 @@ enrichment-mcp/
 ingestion/    two-path IOC ingestion (separate CLI component, own deps)
   record.py           normalized IOC record + dedup key
   store.py            JSONL store: load / merge / write, dedup by (type, indicator)
-  adapters/           source adapters (structured feed; scraped source in PR2)
-  cli.py              python -m ingestion.cli --feed <path|url>
-  fixtures/           synthetic defanged feeds;  test_*.py  offline tests
+  adapters/           source adapters (structured feed + scraped source)
+  cli.py              python -m ingestion.cli --feed/--scrape <path|url>
+  fixtures/           synthetic defanged feeds + pages;  test_*.py  offline tests
 .mcp.json     project-scoped MCP config (Claude Code auto-discovers the server)
 ruff.toml     lint + format configuration for the Python (harness + MCP server)
 .github/workflows/ci.yml   per-component CI (lint / harness / enrichment-mcp / yaraqa / ingestion) on every push
