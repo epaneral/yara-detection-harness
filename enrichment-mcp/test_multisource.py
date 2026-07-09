@@ -170,20 +170,21 @@ def test_consensus_max_is_max_not_sum():
 
 # --- _sources_for / VirusTotalSource ----------------------------------------
 def test_sources_for_configured(monkeypatch):
-    # With a key present, VirusTotal is active (not skipped) for a supported kind.
+    # With only its key present, VirusTotal is active; a keyless source that also
+    # supports the kind (URLhaus) is reported as skipped, not active.
     monkeypatch.setattr(server, "VT_API_KEY", "test-key-not-real")
     active, skipped = server._sources_for("ip_address")
     assert "virustotal" in [s.name for s in active]
-    assert skipped == []
+    assert "virustotal" not in skipped
+    assert "urlhaus" in skipped  # supports ip but no key -> skipped, never hit
 
 
 def test_sources_for_unconfigured_skips(monkeypatch):
-    # Without a key, VirusTotal is skipped (not active), so the fan-out reports it
-    # as skipped rather than erroring or hitting the network.
-    monkeypatch.setattr(server, "VT_API_KEY", "")
-    active, skipped = server._sources_for("ip_address")
+    # With no keys, every source supporting the kind is skipped (not active), so the
+    # fan-out reports them rather than erroring or hitting the network.
+    active, skipped = server._sources_for("ip_address")  # both keys empty via conftest
     assert active == []
-    assert skipped == ["virustotal"]
+    assert "virustotal" in skipped
 
 
 # --- lookup_indicator (async, stub server._vt_get) --------------------------

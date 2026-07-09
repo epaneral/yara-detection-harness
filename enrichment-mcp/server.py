@@ -11,10 +11,10 @@ can call mid-investigation, returning a *normalized* verdict for an indicator
 
 Design notes:
   - Read-only. Reputation lookups only -- nothing here submits, mutates, or deletes.
-  - Sources sit behind a small adapter interface (ReputationSource). VirusTotal is
-    the first, and the lookup_indicator tool fans out across every configured
-    source, returning each one's verdict under the SAME normalized shape plus a
-    combined consensus. More sources slot in without changing that shape.
+  - Sources sit behind a small adapter interface (ReputationSource). VirusTotal
+    and URLhaus are wired in, and the lookup_indicator tool fans out across every
+    configured source, returning each one's verdict under the SAME normalized
+    shape plus a combined consensus. More sources slot in without changing that shape.
   - API key is read from the VT_API_KEY environment variable, never hardcoded.
   - Local stdio transport: launched as a subprocess by an MCP client.
   - One pooled HTTP client is reused across lookups (closed on shutdown), and a
@@ -24,9 +24,9 @@ Design notes:
     repeated indicators (including across an investigate_sample run) do not
     re-hit VirusTotal.
 
-Scope fence (deliberately NOT built here yet): additional sources beyond
-VirusTotal (URLhaus/urlscan/Censys), durable cache persistence, and a formal eval
-suite. See README.md "Roadmap" and multi-source-design.md for those.
+Scope fence (deliberately NOT built here yet): further sources (urlscan/Censys),
+durable cache persistence, and a formal eval suite. See README.md "Roadmap" and
+multi-source-design.md for those.
 """
 
 import asyncio
@@ -58,6 +58,11 @@ except ImportError:
 # --- Configuration ---------------------------------------------------------
 VT_API_BASE = "https://www.virustotal.com/api/v3"
 VT_API_KEY = os.environ.get("VT_API_KEY", "")
+# URLhaus (abuse.ch): a read-only reputation source. Its lookup endpoints are
+# POSTs (query-only, nothing submitted) authenticated with a free Auth-Key,
+# mandatory since 2025-06-30. A missing key just skips the source in the fan-out.
+URLHAUS_API_BASE = "https://urlhaus-api.abuse.ch/v1"
+URLHAUS_API_KEY = os.environ.get("URLHAUS_API_KEY", "")
 REQUEST_TIMEOUT = 30.0  # seconds
 
 # Retry policy for *transient* failures only (429 rate-limit and 5xx). Bounded
@@ -387,32 +392,47 @@ def _retry_delay(resp: httpx.Response, attempt: int) -> float:
     return min(BACKOFF_BASE_SECONDS * (2**attempt), BACKOFF_MAX_SECONDS)
 
 
-async def _vt_get(path: str) -> dict:
-    """GET {VT_API_BASE}/{path} with auth, via the shared client.
+async def _request_json(
+    method: str, url: str, *, headers: dict, data: dict | None = None, cache_key: str
+) -> dict:
+    """Shared read-through + retry wrapper for a JSON GET/POST via the shared client.
 
-    Read-through cached: a fresh cache hit for this path skips the network
-    entirely. On a miss, a 429 or transient 5xx is retried up to MAX_RETRIES
-    times (waiting per _retry_delay between attempts); once retries are exhausted
-    the final response's status raises, and every other error propagates
-    immediately, so the caller maps it to a one-line message via _handle_error.
-    Only a successful response is cached -- errors are never stored.
+    A fresh cache hit for `cache_key` skips the network entirely. On a miss, a 429
+    or transient 5xx is retried up to MAX_RETRIES times (waiting per _retry_delay
+    between attempts); once retries are exhausted the final response's status
+    raises, and every other error propagates immediately, so each source maps it
+    to its own one-line message. Only a successful response is cached. Dispatches
+    on method with client.get/client.post (not client.request) so existing GET
+    fakes keep working.
     """
-    cached = _cache.get(path)
+    cached = _cache.get(cache_key)
     if cached is not None:
         return cached
 
     client = _get_client()
-    url = f"{VT_API_BASE}/{path}"
-    headers = {"x-apikey": VT_API_KEY}
     for attempt in range(MAX_RETRIES + 1):
-        resp = await client.get(url, headers=headers)
+        if method == "POST":
+            resp = await client.post(url, headers=headers, data=data)
+        else:
+            resp = await client.get(url, headers=headers)
         if resp.status_code in RETRY_STATUS_CODES and attempt < MAX_RETRIES:
             await asyncio.sleep(_retry_delay(resp, attempt))
             continue
         resp.raise_for_status()
-        data = resp.json()
-        _cache.set(path, data)
-        return data
+        payload = resp.json()
+        _cache.set(cache_key, payload)
+        return payload
+
+
+async def _vt_get(path: str) -> dict:
+    """GET {VT_API_BASE}/{path} with auth, via the shared cached/retrying wrapper.
+
+    The cache key is the VT path (which uniquely encodes the indicator's type and
+    value); see _request_json for the retry/cache behavior.
+    """
+    return await _request_json(
+        "GET", f"{VT_API_BASE}/{path}", headers={"x-apikey": VT_API_KEY}, cache_key=path
+    )
 
 
 def _handle_error(e: Exception, indicator: str) -> str:
@@ -438,15 +458,46 @@ def _handle_error(e: Exception, indicator: str) -> str:
     return f"Error: unexpected {type(e).__name__} while looking up '{indicator}'."
 
 
+def _verdict(
+    indicator: str,
+    kind: str,
+    *,
+    malicious: int = 0,
+    suspicious: int = 0,
+    harmless: int = 0,
+    undetected: int = 0,
+    reputation=None,
+    flagged_by=(),
+    permalink: str = "",
+) -> str:
+    """Build the normalized verdict JSON that EVERY source returns (the answer, not
+    a raw blob). Centralized so VirusTotal and other sources can't drift in shape;
+    flagged_by is capped at five names.
+    """
+    return json.dumps(
+        {
+            "indicator": indicator,
+            "type": kind,
+            "malicious": malicious,
+            "suspicious": suspicious,
+            "harmless": harmless,
+            "undetected": undetected,
+            "reputation": reputation,
+            "flagged_by": list(flagged_by)[:5],
+            "permalink": permalink,
+        },
+        indent=2,
+    )
+
+
 def _normalize(
     indicator: str, kind: str, gui_id: str, attributes: dict, gui_kind: str | None = None
 ) -> str:
-    """Collapse a VirusTotal object's attributes into a compact verdict (JSON string).
+    """Collapse a VirusTotal object's attributes into the normalized verdict.
 
     This is the point of the server: return the *answer*, not VT's full blob.
-    The same shape is produced for every indicator type so callers (and future
-    sources) stay uniform. gui_kind overrides the permalink path segment when it
-    differs from the verdict type (e.g. permalink 'ip-address' vs type 'ip_address').
+    gui_kind overrides the permalink path segment when it differs from the verdict
+    type (e.g. permalink 'ip-address' vs type 'ip_address').
     """
     stats = attributes.get("last_analysis_stats", {}) or {}
     results = attributes.get("last_analysis_results", {}) or {}
@@ -457,18 +508,17 @@ def _normalize(
         if (r or {}).get("category") in ("malicious", "suspicious")
     )
 
-    verdict = {
-        "indicator": indicator,
-        "type": kind,
-        "malicious": stats.get("malicious", 0),
-        "suspicious": stats.get("suspicious", 0),
-        "harmless": stats.get("harmless", 0),
-        "undetected": stats.get("undetected", 0),
-        "reputation": attributes.get("reputation"),
-        "flagged_by": flagged[:5],
-        "permalink": f"https://www.virustotal.com/gui/{gui_kind or kind}/{gui_id}",
-    }
-    return json.dumps(verdict, indent=2)
+    return _verdict(
+        indicator,
+        kind,
+        malicious=stats.get("malicious", 0),
+        suspicious=stats.get("suspicious", 0),
+        harmless=stats.get("harmless", 0),
+        undetected=stats.get("undetected", 0),
+        reputation=attributes.get("reputation"),
+        flagged_by=flagged,
+        permalink=f"https://www.virustotal.com/gui/{gui_kind or kind}/{gui_id}",
+    )
 
 
 def _extract_indicators(text: str) -> list[dict]:
@@ -628,9 +678,99 @@ class VirusTotalSource(ReputationSource):
         return f"Error: unknown indicator type '{kind}'"
 
 
+async def _urlhaus_query(endpoint: str, data: dict) -> dict:
+    """POST a read-only query to a URLhaus endpoint and return the parsed JSON."""
+    # A source-prefixed cache key so URLhaus entries never collide with VT paths
+    # and repeated URLhaus lookups (or overlapping investigate_sample runs) reuse it.
+    cache_key = "urlhaus:" + endpoint + ":" + ":".join(f"{k}={v}" for k, v in sorted(data.items()))
+    return await _request_json(
+        "POST",
+        f"{URLHAUS_API_BASE}/{endpoint}/",
+        headers={"Auth-Key": URLHAUS_API_KEY},
+        data=data,
+        cache_key=cache_key,
+    )
+
+
+def _urlhaus_error(e: Exception, indicator: str) -> str:
+    """Map a URLhaus transport error to an actionable line (no stack traces)."""
+    if isinstance(e, httpx.HTTPStatusError):
+        code = e.response.status_code
+        if code == 401:
+            return "Error: URLhaus rejected the API key (401). Check that URLHAUS_API_KEY is valid."
+        if code == 429:
+            return "Error: URLhaus rate limit hit (429) -- wait a moment and retry."
+        return f"Error: URLhaus returned HTTP {code} for '{indicator}'."
+    if isinstance(e, httpx.TimeoutException):
+        return f"Error: request to URLhaus timed out after {REQUEST_TIMEOUT:.0f}s. Try again."
+    if isinstance(e, httpx.RequestError):
+        return f"Error: network error contacting URLhaus ({type(e).__name__}). Check connectivity."
+    return f"Error: unexpected {type(e).__name__} while looking up '{indicator}' on URLhaus."
+
+
+def _urlhaus_verdict(indicator: str, kind: str, data: dict) -> str:
+    """Map a URLhaus response into the normalized verdict (or a not-found/error line).
+
+    URLhaus is a blocklist of *known-malicious* URLs, so a `query_status: ok` means
+    the indicator is bad: malicious = the number of listed URLs (1 for a URL lookup,
+    url_count for a host), flagged_by = URLhaus plus any external blacklist listing
+    it. `no_results` is 'no data' (a not-found, like a VT 404); anything else
+    (invalid_*, http_post_expected) is an error.
+    """
+    status = data.get("query_status")
+    if status == "no_results":
+        return f"Not found: '{indicator}' is not in URLhaus's dataset (no reputation data)."
+    if status != "ok":
+        return f"Error: URLhaus returned query_status '{status}' for '{indicator}'."
+
+    if kind == "url":
+        malicious = 1
+    else:  # host lookup (ip_address / domain)
+        try:
+            malicious = int(data.get("url_count"))  # preferred: the true total
+        except (TypeError, ValueError):
+            malicious = len(data.get("urls") or [])  # missing/non-numeric -> count returned URLs
+
+    blacklists = data.get("blacklists") or {}
+    listed = sorted(name for name, st in blacklists.items() if st and st != "not listed")
+    flagged = ["urlhaus", *listed]
+    return _verdict(
+        indicator,
+        kind,
+        malicious=malicious,
+        flagged_by=flagged,
+        permalink=data.get("urlhaus_reference", ""),
+    )
+
+
+class URLhausSource(ReputationSource):
+    """URLhaus (abuse.ch) adapter. Answers url/ip/domain via the host and url query
+    endpoints (read-only POSTs); file-hash payload lookups are a later extension.
+    Behind the same interface and normalized shape as VirusTotal.
+    """
+
+    name = "urlhaus"
+
+    def supports(self, kind: str) -> bool:
+        return kind in ("url", "ip_address", "domain")
+
+    def configured(self) -> bool:
+        return bool(URLHAUS_API_KEY)
+
+    async def lookup(self, kind: str, value: str) -> str:
+        try:
+            if kind == "url":
+                data = await _urlhaus_query("url", {"url": value})
+            else:  # ip_address or domain -> host endpoint
+                data = await _urlhaus_query("host", {"host": value})
+        except Exception as e:  # noqa: BLE001 - mapped to actionable text by _urlhaus_error
+            return _urlhaus_error(e, value)
+        return _urlhaus_verdict(value, kind, data)
+
+
 # The source registry the fan-out iterates; order here is the display order in
 # the envelope's per-source map. New sources are appended.
-_SOURCES: list[ReputationSource] = [VirusTotalSource()]
+_SOURCES: list[ReputationSource] = [VirusTotalSource(), URLhausSource()]
 
 
 def _sources_for(kind: str) -> tuple[list[ReputationSource], list[str]]:

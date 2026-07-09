@@ -56,23 +56,30 @@ a `consensus`:
 {
   "indicator": "192.0.2.44",
   "type": "ip_address",
-  "sources": { "virustotal": { ...normalized verdict... } },
+  "sources": {
+    "virustotal": { ...normalized verdict... },
+    "urlhaus":    { ...normalized verdict... }
+  },
   "consensus": {
     "malicious": true, "suspicious": false,
-    "sources_malicious": ["virustotal"], "sources_suspicious": [],
-    "max_malicious": 3,
-    "sources_completed": ["virustotal"], "sources_skipped": [], "sources_errored": []
+    "sources_malicious": ["urlhaus", "virustotal"], "sources_suspicious": [],
+    "max_malicious": 7,
+    "sources_completed": ["urlhaus", "virustotal"], "sources_skipped": [], "sources_errored": []
   }
 }
 ```
 
-Counts are **never merged** across sources (VirusTotal engines and, say, URLhaus
+Counts are **never merged** across sources (VirusTotal engines and URLhaus
 blacklists aren't comparable) — `consensus` only summarizes: which sources called it
 malicious/suspicious, the `max` malicious count seen (not a sum), and which sources
 completed, were skipped (no key), or errored. A source with no API key is silently
-skipped, and one source's error never sinks the others. Today VirusTotal is the only
-wired-in source; more slot in behind the same interface. See
-[`multi-source-design.md`](multi-source-design.md) for the full design and rollout.
+skipped, and one source's error never sinks the others.
+
+**Sources wired in today:** VirusTotal (`VT_API_KEY`; all four kinds) and URLhaus
+(`URLHAUS_API_KEY`; url / ip / domain). Set either, both, or neither — with no keys
+the tools return an actionable message; with one, the envelope carries that one
+source. See [`multi-source-design.md`](multi-source-design.md) for the full design,
+the source/key roster, and the rollout (urlscan and Censys next).
 
 ## Chained investigation
 
@@ -129,18 +136,23 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-Provide your free VirusTotal API key as an environment variable:
+Provide a free API key for each reputation source you want to use. VirusTotal is
+the core source; [URLhaus](https://auth.abuse.ch/) (free abuse.ch Auth-Key) adds a
+second opinion for url/ip/domain via `lookup_indicator`. A source with no key is
+simply skipped, so setting just `VT_API_KEY` is enough to start.
 
 ```powershell
 # PowerShell
 $env:VT_API_KEY = "your_key_here"
+$env:URLHAUS_API_KEY = "your_urlhaus_key_here"   # optional; enables URLhaus
 ```
 ```bash
 # bash/zsh
 export VT_API_KEY="your_key_here"
+export URLHAUS_API_KEY="your_urlhaus_key_here"   # optional; enables URLhaus
 ```
 
-Or copy `.env.example` to `.env` and put the key there (auto-loaded for local
+Or copy `.env.example` to `.env` and put the key(s) there (auto-loaded for local
 testing; `.env` is gitignored).
 
 ## Run / test it
@@ -258,6 +270,10 @@ Every failure mode returns a single actionable line, never a stack trace:
 | Indicator unknown (404) | `Not found: '<indicator>' is not in VirusTotal's dataset ...` |
 | Timeout / network error | `Error: request to VirusTotal timed out ...` / `network error ...` |
 
+Each source maps its own failures the same way (e.g. `Error: URLhaus rejected the
+API key (401). ...`), and within `lookup_indicator` a per-source error becomes that
+source's `error` entry without sinking the others.
+
 A transient **429 or 5xx is retried first** — honoring a `Retry-After` header when
 present, otherwise bounded exponential backoff, capped at a few attempts — and only
 degrades to the one-line message above once retries are exhausted. Lookups share a
@@ -275,10 +291,11 @@ run) reuses the stored verdict instead of re-hitting VirusTotal. Errors are neve
 
 ## Roadmap
 
-Multi-source fan-out is **in progress** — the adapter interface, the fan-out
-envelope, and the `lookup_indicator` tool are in place with VirusTotal as the first
-source (see [`multi-source-design.md`](multi-source-design.md)). Remaining:
+Multi-source fan-out is **live** — the adapter interface, the fan-out envelope, and
+the `lookup_indicator` tool are in place with **VirusTotal and URLhaus** wired in
+(see [`multi-source-design.md`](multi-source-design.md)). Remaining:
 
-- Additional source adapters behind the same interface: **URLhaus**, then **urlscan**, then **Censys**.
+- An opt-in `sources` toggle on `investigate_sample` (fan out per indicator).
+- More source adapters behind the same interface: **urlscan**, then **Censys**.
 - A **formal eval suite**: an offline golden-file gate in CI, plus an opt-in live-key smoke script.
 - Durable cache **persistence** (the in-process TTL cache is in-memory only).
