@@ -76,12 +76,13 @@ completed, were skipped (no key), or errored. A source with no API key is silent
 skipped, and one source's error never sinks the others.
 
 **Sources wired in today:** VirusTotal (`VT_API_KEY`; all four kinds), URLhaus
-(`URLHAUS_API_KEY`; url / ip / domain), and urlscan.io (`URLSCAN_API_KEY`; url / ip /
-domain — searches existing scans and reads the top result's verdict). Set any, all,
-or none — with no keys the tools return an actionable message; otherwise the envelope
+(`URLHAUS_API_KEY`; url / ip / domain), urlscan.io (`URLSCAN_API_KEY`; url / ip /
+domain — searches existing scans and reads the top result's verdict), and AbuseIPDB
+(`ABUSEIPDB_API_KEY`; ip only — abuse-confidence score → verdict). Set any, all, or
+none — with no keys the tools return an actionable message; otherwise the envelope
 carries whichever sources are configured. See
-[`multi-source-design.md`](multi-source-design.md) for the full design, the
-source/key roster, and the rollout (Censys next).
+[`multi-source-design.md`](multi-source-design.md) for the full design and the
+source/key roster.
 
 ## Chained investigation
 
@@ -144,22 +145,25 @@ pip install -r requirements.txt
 ```
 
 Provide a free API key for each reputation source you want to use. VirusTotal is
-the core source; [URLhaus](https://auth.abuse.ch/) (free abuse.ch Auth-Key) and
-[urlscan.io](https://urlscan.io/user/apikey/) (free key) add second/third opinions
-for url/ip/domain via `lookup_indicator`. A source with no key is simply skipped, so
+the core source; [URLhaus](https://auth.abuse.ch/) (free Auth-Key),
+[urlscan.io](https://urlscan.io/user/apikey/) (free key), and
+[AbuseIPDB](https://www.abuseipdb.com/account/api) (free key; IP reputation) add
+further opinions via `lookup_indicator`. A source with no key is simply skipped, so
 setting just `VT_API_KEY` is enough to start.
 
 ```powershell
 # PowerShell
 $env:VT_API_KEY = "your_key_here"
-$env:URLHAUS_API_KEY = "your_urlhaus_key_here"   # optional; enables URLhaus
-$env:URLSCAN_API_KEY = "your_urlscan_key_here"   # optional; enables urlscan.io
+$env:URLHAUS_API_KEY = "your_urlhaus_key_here"       # optional; enables URLhaus
+$env:URLSCAN_API_KEY = "your_urlscan_key_here"       # optional; enables urlscan.io
+$env:ABUSEIPDB_API_KEY = "your_abuseipdb_key_here"   # optional; enables AbuseIPDB (IP)
 ```
 ```bash
 # bash/zsh
 export VT_API_KEY="your_key_here"
-export URLHAUS_API_KEY="your_urlhaus_key_here"   # optional; enables URLhaus
-export URLSCAN_API_KEY="your_urlscan_key_here"   # optional; enables urlscan.io
+export URLHAUS_API_KEY="your_urlhaus_key_here"       # optional; enables URLhaus
+export URLSCAN_API_KEY="your_urlscan_key_here"       # optional; enables urlscan.io
+export ABUSEIPDB_API_KEY="your_abuseipdb_key_here"   # optional; enables AbuseIPDB (IP)
 ```
 
 Or copy `.env.example` to `.env` and put the key(s) there (auto-loaded for local
@@ -327,9 +331,11 @@ run) reuses the stored verdict instead of re-hitting VirusTotal. Errors are neve
 ## Roadmap
 
 Multi-source fan-out is **live** — the adapter interface, the fan-out envelope, the
-`lookup_indicator` tool (with **VirusTotal, URLhaus, and urlscan.io** wired in), and
-the [eval suite](#eval) are all in place (see [`multi-source-design.md`](multi-source-design.md)).
-Remaining:
+`lookup_indicator` tool (with **VirusTotal, URLhaus, urlscan.io, and AbuseIPDB** wired
+in), and the [eval suite](#eval) are all in place (see
+[`multi-source-design.md`](multi-source-design.md)). Remaining:
 
-- A **Censys** adapter (note: Censys returns host data, not a malicious verdict — its fit is still being decided).
 - Durable cache **persistence** (the in-process TTL cache is in-memory only).
+
+(Censys was considered as a source but dropped — its API returns host/attack-surface
+data, not a malicious verdict, so AbuseIPDB fills the IP-reputation slot instead.)
