@@ -43,6 +43,8 @@ tests/
   manifest.yml  ground-truth labels + expected matches (single source of truth)
   test_rules.py the harness
   test_rule_conventions.py  plyara-based rule-convention checks (house style)
+  ruleset.py    shared compile / manifest / scan primitives (harness + retro-hunt)
+  retrohunt.py  retro-hunt: preview a draft rule / map the ruleset over the corpus
 enrichment-mcp/
   server.py           enrichment MCP server: VirusTotal + URLhaus + urlscan + AbuseIPDB (separate component, own deps)
   multi-source-design.md  design note: multi-source fan-out + eval roadmap
@@ -121,6 +123,13 @@ rule is covered automatically.
 pip install -r requirements.txt
 pytest -v
 ```
+
+**Retro-hunt** (`tests/retrohunt.py`) is the discovery counterpart to the gates: run a
+*draft* rule over the corpus to preview its footprint — malicious caught, benign FPs,
+misses — before wiring it into the manifest (`python tests/retrohunt.py --rule draft.yar`),
+or print a coverage map of the committed ruleset annotated against the manifest (no args).
+Informational — it never fails on findings; the `harness` job prints the coverage map on
+every push.
 
 Alongside the detection gates, CI runs [`ruff`](https://docs.astral.sh/ruff/) over the
 Python (harness + MCP server) as two further gates: a **format check** (`ruff format

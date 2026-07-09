@@ -15,6 +15,7 @@ Three independent Python components with separate deps. `pytest.ini` scopes `tes
 
 ```bash
 pip install -r requirements.txt && pytest -v        # YARA harness
+python tests/retrohunt.py                           # retro-hunt coverage map (--rule <f.yar> previews a draft)
 ruff format --check . && ruff check .               # format + lint gates (pinned ruff==0.15.18 in CI)
 pip install -r enrichment-mcp/requirements-dev.txt && pytest enrichment-mcp -v   # MCP server
 pip install -r ingestion/requirements-dev.txt && pytest ingestion -v   # IOC ingestion
@@ -40,7 +41,10 @@ aggregate that branch protection requires; a skipped needed job fails it on purp
   manifest and it's covered automatically. Four gates: compilation, recall, FP rate
   (`<= FP_THRESHOLD`, a constant currently `0.0` — any benign match fails CI), and
   manifest/ruleset integrity (no orphan rule, no unknown rule name in `expected_rules`,
-  no missing sample path).
+  no missing sample path). `tests/retrohunt.py` is the discovery counterpart (not a gate):
+  preview a draft rule over the corpus (`--rule`) or print the committed ruleset's coverage
+  map; it and the harness share the compile/scan primitives in `tests/ruleset.py`, and the
+  `harness` job prints the coverage map non-blocking on every push.
 - **Paired corpus.** Every `corpus/malicious/*` sample has a `corpus/benign/*` near-miss that
   shares its surface features but not its intent. The benign column measures precision — add a
   benign shadow whenever you add a malicious sample. Sample comments are scanned content too
