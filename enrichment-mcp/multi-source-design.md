@@ -88,11 +88,10 @@ Two layers, mirroring the repo's existing `pytest`-vs-`smoke_test.py` split:
 
 ## Rollout (one focused PR each)
 
-1. **Adapter refactor** (VT-only, non-breaking) + envelope + `lookup_indicator`. ← *this PR*
-2. **URLhaus adapter** behind the interface (+ key/skip handling + the read-only wording).
-3. **Eval suite** (offline golden-file gate + opt-in `eval_live.py`).
-4. **urlscan adapter.**
-5. **Censys adapter.**
-
-`investigate_sample` gains an opt-in `sources` toggle to fan out per indicator when
-there is more than one source to fan out to (lands with the URLhaus PR).
+1. ~~**Adapter refactor** (VT-only, non-breaking) + envelope + `lookup_indicator`.~~ ✅ done
+2. ~~**URLhaus adapter** behind the interface (+ key/skip handling + the read-only wording).~~ ✅ done
+3. **`investigate_sample` `sources` toggle** — fan out per indicator now that there is
+   more than one source (kept a focused follow-up rather than bundled into the URLhaus PR).
+4. **Eval suite** (offline golden-file gate + opt-in `eval_live.py`).
+5. **urlscan adapter.**
+6. **Censys adapter.**
