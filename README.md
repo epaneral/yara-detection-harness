@@ -115,7 +115,8 @@ its label there and it's automatically covered. Four gates:
 The `harness` job also runs a `plyara`-based **rule-convention** suite
 (`tests/test_rule_conventions.py`) that parses each rule's source and enforces this repo's
 house style: a complete `meta` block, well-formed MITRE `attack` technique IDs, a controlled
-`severity` vocabulary, atom-anchored regex (no leading `.*`), and the two-primitive floor. It's
+`severity` vocabulary, atom-anchored regex (no leading `.*`), and two-primitive co-occurrence
+in the condition. It's
 the house-style complement to the generic `yaraqa` gate, parametrized over every rule so a new
 rule is covered automatically.
 
