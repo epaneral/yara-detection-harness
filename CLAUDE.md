@@ -62,7 +62,8 @@ aggregate that branch protection requires; a skipped needed job fails it on purp
   Beyond that generic gate, a `plyara`-based convention suite (`tests/test_rule_conventions.py`,
   in the `harness` pytest job) parses each rule's source and enforces the house style — a complete
   `meta` block, well-formed MITRE `attack` IDs, a controlled `severity` vocabulary, atom-anchored
-  regex (no leading `.*`), and the `>=2`-string (two-primitive) floor — parametrized over every rule.
+  regex (no leading `.*`), and two-primitive co-occurrence enforced on each condition (top-level
+  AND or a `>=2` of-quantifier; presence-of-one conditions fail) — parametrized over every rule.
 - **enrichment-mcp/** — self-contained multi-source reputation MCP server (`server.py`, stdio,
   read-only lookups (hash/URL/IP/domain) across VirusTotal, URLhaus, urlscan.io, and AbuseIPDB,
   plus extract/investigate tools, one normalized verdict shape). Separate deps; not run by the
