@@ -245,7 +245,7 @@ either way.
 Expected output (with a key):
 
 ```
-connected to 'virustotal_mcp'
+connected to 'enrichment_mcp'
 tools: vt_lookup_file_hash, vt_lookup_url, vt_lookup_ip_address, vt_lookup_domain, lookup_indicator, extract_indicators, investigate_sample
 
 looking up EICAR hash 275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f ...

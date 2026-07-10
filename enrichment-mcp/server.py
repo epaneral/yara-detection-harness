@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-VirusTotal enrichment MCP server.
+Multi-source threat-reputation MCP server (VirusTotal, URLhaus, urlscan, AbuseIPDB).
 
 The enrichment layer for the yara-detection-harness. The harness detects
 malicious *patterns*; the natural next question in an investigation is
 "this rule fired -- is the indicator it surfaced actually known-bad?"
-This server wraps the VirusTotal v3 reputation API as MCP tools an LLM agent
-can call mid-investigation, returning a *normalized* verdict for an indicator
-(a file hash, URL, IP, or domain) instead of VirusTotal's full raw report.
+This server wraps several reputation APIs as MCP tools an LLM agent can call
+mid-investigation, returning a *normalized* verdict for an indicator (a file
+hash, URL, IP, or domain) instead of each provider's full raw report.
 
 Design notes:
   - Read-only. Reputation lookups only -- nothing here submits, mutates, or deletes.
@@ -15,7 +15,8 @@ Design notes:
     URLhaus, urlscan, and AbuseIPDB are wired in, and the lookup_indicator tool fans
     out across every configured source, returning each one's verdict under the SAME
     normalized shape plus a combined consensus. More slot in without changing that shape.
-  - API key is read from the VT_API_KEY environment variable, never hardcoded.
+  - API keys are read from per-source environment variables (VT_API_KEY,
+    URLHAUS_API_KEY, URLSCAN_API_KEY, ABUSEIPDB_API_KEY), never hardcoded.
   - Local stdio transport: launched as a subprocess by an MCP client.
   - One pooled HTTP client is reused across lookups (closed on shutdown), and a
     transient 429/5xx is retried with bounded backoff before it degrades to the
@@ -156,7 +157,7 @@ async def _lifespan(_server: FastMCP):
         await _close_client()
 
 
-mcp = FastMCP("virustotal_mcp", lifespan=_lifespan)
+mcp = FastMCP("enrichment_mcp", lifespan=_lifespan)
 
 
 # --- Input models ----------------------------------------------------------
@@ -982,8 +983,8 @@ def _sources_for(kind: str) -> tuple[list[ReputationSource], list[str]]:
 
 def _no_source_configured(kind: str) -> str:
     """Actionable one-line message when no configured source can answer `kind`."""
-    # Only VirusTotal exists today, so a missing key is the cause; _require_key's
-    # message names the env var and where to get a key. Generalizes as sources grow.
+    # VirusTotal answers every kind, so reaching here means VT_API_KEY is unset;
+    # reuse _require_key's message (names the env var and where to get a key).
     key_err = _require_key()
     if key_err:
         return key_err
