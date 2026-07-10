@@ -215,14 +215,18 @@ def test_lookup_indicator_envelope_malicious(monkeypatch):
 
 def test_lookup_indicator_no_key_returns_actionable_line(monkeypatch):
     # No configured source -> a single actionable line, not a JSON envelope, so the
-    # caller gets a fix-it message instead of an empty consensus.
-    monkeypatch.setattr(server, "VT_API_KEY", "")
+    # caller gets a fix-it message instead of an empty consensus. The line names
+    # every env key that could enable an answer for the kind, not just VT's.
+    for key in ("VT_API_KEY", "URLHAUS_API_KEY", "URLSCAN_API_KEY", "ABUSEIPDB_API_KEY"):
+        monkeypatch.setattr(server, key, "")
     out = asyncio.run(
         server.lookup_indicator(
             server.IndicatorLookupInput(indicator="192.0.2.44", type="ip_address")
         )
     )
-    assert "VT_API_KEY is not set" in out
+    assert "no configured reputation source supports 'ip_address'" in out
+    assert "VT_API_KEY" in out  # every enabling key named, not just VT's ...
+    assert "ABUSEIPDB_API_KEY" in out  # ... through the last ip-capable source
     assert not out.startswith("{")  # not a JSON envelope
 
 

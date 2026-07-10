@@ -663,6 +663,9 @@ class ReputationSource:
     """
 
     name: str = ""
+    # The environment variable that configures this source, so error messages can
+    # tell the caller exactly which key(s) would enable an answer.
+    env_key: str = ""
 
     def supports(self, kind: str) -> bool:
         """Whether this source can answer the given indicator kind."""
@@ -678,12 +681,13 @@ class ReputationSource:
 
 
 class VirusTotalSource(ReputationSource):
-    """VirusTotal adapter -- the first (and today only) source. It wraps the
-    existing per-kind VT lookups unchanged; more sources slot in behind this
-    same interface without touching it or the normalized verdict shape.
+    """VirusTotal adapter -- the original source. It wraps the existing per-kind
+    VT lookups unchanged; the other sources slot in behind this same interface
+    without touching it or the normalized verdict shape.
     """
 
     name = "virustotal"
+    env_key = "VT_API_KEY"
 
     def supports(self, kind: str) -> bool:
         return kind in ("file", "url", "ip_address", "domain")
@@ -775,6 +779,7 @@ class URLhausSource(ReputationSource):
     """
 
     name = "urlhaus"
+    env_key = "URLHAUS_API_KEY"
 
     def supports(self, kind: str) -> bool:
         return kind in ("url", "ip_address", "domain")
@@ -864,6 +869,7 @@ class UrlscanSource(ReputationSource):
     """
 
     name = "urlscan"
+    env_key = "URLSCAN_API_KEY"
 
     def supports(self, kind: str) -> bool:
         return kind in ("url", "ip_address", "domain")
@@ -948,6 +954,7 @@ class AbuseIPDBSource(ReputationSource):
     """
 
     name = "abuseipdb"
+    env_key = "ABUSEIPDB_API_KEY"
 
     def supports(self, kind: str) -> bool:
         return kind == "ip_address"
@@ -982,13 +989,17 @@ def _sources_for(kind: str) -> tuple[list[ReputationSource], list[str]]:
 
 
 def _no_source_configured(kind: str) -> str:
-    """Actionable one-line message when no configured source can answer `kind`."""
-    # VirusTotal answers every kind, so reaching here means VT_API_KEY is unset;
-    # reuse _require_key's message (names the env var and where to get a key).
-    key_err = _require_key()
-    if key_err:
-        return key_err
-    return f"Error: no configured reputation source supports '{kind}' indicators."
+    """Actionable one-line message when no configured source can answer `kind`,
+    naming every env key that would enable an answer for that kind.
+    """
+    supporting = [s for s in _SOURCES if s.supports(kind)]
+    if not supporting:
+        return f"Error: no reputation source supports '{kind}' indicators."
+    keys = ", ".join(s.env_key for s in supporting)
+    return (
+        f"Error: no configured reputation source supports '{kind}' indicators. "
+        f"Set any of: {keys} (see README.md for where to get each key)."
+    )
 
 
 def _classify_source_result(raw: str) -> dict:

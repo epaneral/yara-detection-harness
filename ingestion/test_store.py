@@ -52,6 +52,8 @@ def test_write_load_round_trips(tmp_path):
     path = tmp_path / "store" / "indicators.jsonl"
     store.write(path, original)
     assert store.load(path) == original
+    # The atomic-rename write must not leave its temp file behind.
+    assert [p.name for p in path.parent.iterdir()] == [path.name]
 
 
 def test_write_output_is_sorted_by_key(tmp_path):
