@@ -1,0 +1,12 @@
+# One canonical byte stream on every platform. CI (Linux) has always scanned the
+# LF bytes stored in the index; core.autocrlf=true checkouts on Windows scanned
+# CRLF for some files and LF for others (the working tree was mixed). YARA
+# verdicts must not depend on which OS ran the harness, so every text file is
+# LF in the index AND in the working tree. eol=lf overrides core.autocrlf.
+#
+# If a sample must one day carry CRLF bytes on purpose (a CRLF-sensitive rule),
+# pin that file here with `-text` instead of letting the checkout platform decide.
+* text=auto eol=lf
+
+# Binary assets: never eol-normalize, never diff as text.
+*.png binary
