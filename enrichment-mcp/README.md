@@ -1,13 +1,13 @@
 # enrichment-mcp
 
-A small, local **MCP server** that wraps the [VirusTotal v3](https://docs.virustotal.com/reference/overview)
-reputation API as tools an LLM agent can call during an investigation.
+A small, local **MCP server** that wraps threat-reputation APIs — [VirusTotal v3](https://docs.virustotal.com/reference/overview),
+URLhaus, urlscan.io, AbuseIPDB — as tools an LLM agent can call during an investigation.
 
 It's the **enrichment layer** for this repo. The YARA harness one level up detects
 malicious *patterns*; this answers the next question a real investigation asks —
 *"that rule fired — is the indicator it surfaced (a hash, a URL) actually
-known-bad?"* One source today (VirusTotal), but the tool interface is built so
-more reputation sources could slot in behind the same normalized verdict.
+known-bad?"* Four sources today (VirusTotal, URLhaus, urlscan.io, AbuseIPDB), all
+slotted in behind the same normalized verdict.
 
 > Self-contained: this folder has its own dependencies and does not touch the
 > harness or its CI. It is not exercised by the repo's pytest suite.
