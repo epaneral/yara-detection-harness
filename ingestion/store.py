@@ -8,6 +8,7 @@ out of scope).
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -48,8 +49,14 @@ def merge(existing: Store, incoming: Iterable[Indicator]) -> tuple[Store, int]:
 
 
 def write(path: str | Path, store: Store) -> None:
-    """Write the store as JSONL, sorted by key for stable diffs."""
+    """Write the store as JSONL, sorted by key for stable diffs.
+
+    Written to a sibling temp file and atomically renamed over the target, so a
+    crash mid-write can't leave a truncated store that the next load() chokes on.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = [json.dumps(store[key].to_dict(), ensure_ascii=False) for key in sorted(store)]
-    path.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
+    os.replace(tmp, path)
