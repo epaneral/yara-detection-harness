@@ -55,7 +55,9 @@ def coverage_rows(scan: dict[str, list[str]], samples: list[dict]) -> list[dict]
 def preview_summary(scan: dict[str, list[str]], samples: list[dict]) -> dict:
     """Footprint of a candidate ruleset over the corpus: hits, FPs, misses. Pure."""
     idx = _expected_index(samples)
-    hits, fps, missed = [], [], []
+    hits: list[str] = []
+    fps: list[str] = []
+    missed: list[str] = []
     for path in sorted(idx):
         label, _ = idx[path]
         matched = bool(scan.get(path))
@@ -104,7 +106,7 @@ def preview_text(summary: dict, rule_names: list[str]) -> str:
 # --- CLI --------------------------------------------------------------------
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Preview a candidate rule, or map the committed ruleset, over the corpus."
     )

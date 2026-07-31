@@ -39,12 +39,14 @@ import os
 import re
 import time
 from collections import OrderedDict
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import quote
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 # Optional convenience: auto-load a local .env when present (e.g. for Inspector
@@ -148,7 +150,7 @@ async def _close_client() -> None:
 
 
 @asynccontextmanager
-async def _lifespan(_server: FastMCP):
+async def _lifespan(_server: FastMCP) -> AsyncIterator[None]:
     """Own the shared client's lifecycle: nothing to set up (it's created lazily
     on the first lookup), but close it on shutdown so the pool doesn't leak."""
     try:
@@ -304,7 +306,7 @@ class InvestigateInput(BaseModel):
 # Maps an indicator kind to the existing typed input model (and its field) that
 # validates and normalizes it, so lookup_indicator reuses the exact same rules as
 # the vt_lookup_* tools instead of duplicating them.
-_KIND_INPUT = {
+_KIND_INPUT: dict[str, tuple[type[BaseModel], str]] = {
     "file": (HashLookupInput, "file_hash"),
     "url": (UrlLookupInput, "url"),
     "ip_address": (IpLookupInput, "ip"),
@@ -369,7 +371,7 @@ class _TTLCache:
     injectable so expiry is testable without real time passing.
     """
 
-    def __init__(self, ttl: float, max_entries: int, clock=time.monotonic):
+    def __init__(self, ttl: float, max_entries: int, clock: Callable[[], float] = time.monotonic):
         self._ttl = ttl
         self._max = max_entries
         self._clock = clock
@@ -414,7 +416,7 @@ def _retry_delay(resp: httpx.Response, attempt: int) -> float:
             pass  # HTTP-date form -- fall through to backoff
         else:
             return max(0.0, min(secs, RETRY_AFTER_MAX_SECONDS))
-    return min(BACKOFF_BASE_SECONDS * (2**attempt), BACKOFF_MAX_SECONDS)
+    return min(BACKOFF_BASE_SECONDS * (2.0**attempt), BACKOFF_MAX_SECONDS)
 
 
 async def _request_json(
@@ -444,9 +446,10 @@ async def _request_json(
             await asyncio.sleep(_retry_delay(resp, attempt))
             continue
         resp.raise_for_status()
-        payload = resp.json()
+        payload: dict = resp.json()
         _cache.set(cache_key, payload)
         return payload
+    raise AssertionError("unreachable: the final attempt either returns or raises")
 
 
 async def _vt_get(path: str) -> dict:
@@ -491,8 +494,8 @@ def _verdict(
     suspicious: int = 0,
     harmless: int = 0,
     undetected: int = 0,
-    reputation=None,
-    flagged_by=(),
+    reputation: int | None = None,
+    flagged_by: Sequence[str] = (),
     permalink: str = "",
 ) -> str:
     """Build the normalized verdict JSON that EVERY source returns (the answer, not
@@ -755,8 +758,9 @@ def _urlhaus_verdict(indicator: str, kind: str, data: dict) -> str:
     if kind == "url":
         malicious = 1
     else:  # host lookup (ip_address / domain)
+        count: Any = data.get("url_count")
         try:
-            malicious = int(data.get("url_count"))  # preferred: the true total
+            malicious = int(count)  # preferred: the true total
         except (TypeError, ValueError):
             malicious = len(data.get("urls") or [])  # missing/non-numeric -> count returned URLs
 
@@ -1007,7 +1011,8 @@ def _classify_source_result(raw: str) -> dict:
     not-found marker, or an error marker (mirrors investigate_sample's row rule).
     """
     try:
-        return json.loads(raw)
+        parsed: dict = json.loads(raw)
+        return parsed
     except ValueError:
         if raw.startswith("Not found:"):
             return {"not_found": raw}
@@ -1067,13 +1072,13 @@ async def _fanout_lookup(kind: str, value: str) -> dict:
 # --- Tools -----------------------------------------------------------------
 @mcp.tool(
     name="vt_lookup_file_hash",
-    annotations={
-        "title": "VirusTotal File-Hash Reputation",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    annotations=ToolAnnotations(
+        title="VirusTotal File-Hash Reputation",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
 )
 async def vt_lookup_file_hash(params: HashLookupInput) -> str:
     """Look up a file hash's reputation on VirusTotal and return a normalized verdict.
@@ -1107,13 +1112,13 @@ async def vt_lookup_file_hash(params: HashLookupInput) -> str:
 
 @mcp.tool(
     name="vt_lookup_url",
-    annotations={
-        "title": "VirusTotal URL Reputation",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    annotations=ToolAnnotations(
+        title="VirusTotal URL Reputation",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
 )
 async def vt_lookup_url(params: UrlLookupInput) -> str:
     """Look up a URL's reputation on VirusTotal and return a normalized verdict.
@@ -1136,13 +1141,13 @@ async def vt_lookup_url(params: UrlLookupInput) -> str:
 
 @mcp.tool(
     name="vt_lookup_ip_address",
-    annotations={
-        "title": "VirusTotal IP-Address Reputation",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    annotations=ToolAnnotations(
+        title="VirusTotal IP-Address Reputation",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
 )
 async def vt_lookup_ip_address(params: IpLookupInput) -> str:
     """Look up an IPv4 address's reputation on VirusTotal and return a normalized verdict.
@@ -1164,13 +1169,13 @@ async def vt_lookup_ip_address(params: IpLookupInput) -> str:
 
 @mcp.tool(
     name="vt_lookup_domain",
-    annotations={
-        "title": "VirusTotal Domain Reputation",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    annotations=ToolAnnotations(
+        title="VirusTotal Domain Reputation",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
 )
 async def vt_lookup_domain(params: DomainLookupInput) -> str:
     """Look up a domain's reputation on VirusTotal and return a normalized verdict.
@@ -1192,13 +1197,13 @@ async def vt_lookup_domain(params: DomainLookupInput) -> str:
 
 @mcp.tool(
     name="lookup_indicator",
-    annotations={
-        "title": "Multi-Source Indicator Reputation",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    annotations=ToolAnnotations(
+        title="Multi-Source Indicator Reputation",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
 )
 async def lookup_indicator(params: IndicatorLookupInput) -> str:
     """Look up one indicator across every configured reputation source and return a
@@ -1250,13 +1255,13 @@ async def lookup_indicator(params: IndicatorLookupInput) -> str:
 
 @mcp.tool(
     name="extract_indicators",
-    annotations={
-        "title": "Extract Indicators from Text",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": False,
-    },
+    annotations=ToolAnnotations(
+        title="Extract Indicators from Text",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
 )
 def extract_indicators(params: ExtractInput) -> str:
     """Extract network indicators (URLs, IPv4s, domains) from sample text.
@@ -1315,13 +1320,13 @@ def _tally_multi(row: dict, envelope: dict, tally: dict) -> None:
 
 @mcp.tool(
     name="investigate_sample",
-    annotations={
-        "title": "Investigate Sample (extract + chain lookups)",
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-        "openWorldHint": True,
-    },
+    annotations=ToolAnnotations(
+        title="Investigate Sample (extract + chain lookups)",
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
 )
 async def investigate_sample(params: InvestigateInput) -> str:
     """Extract indicators from sample text and chain a reputation lookup for each.

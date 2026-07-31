@@ -2,3 +2,4 @@
 # runner. The runtime requirements.txt stays free of test-only packages.
 -r requirements.txt
 pytest==9.1.1
+mypy==2.3.0     # type gate (CI runs `mypy ingestion`; config in ../mypy.ini)

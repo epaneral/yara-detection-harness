@@ -136,11 +136,15 @@ Alongside the detection gates, CI runs [`ruff`](https://docs.astral.sh/ruff/) ov
 Python (harness + MCP server) as two further gates: a **format check** (`ruff format
 --check`) and a **lint pass** (`ruff check`, covering pyflakes, bugbear, blind-except,
 pyupgrade, async and pytest-style rules). Both are version-pinned so the result depends
-only on the code, not on whichever `ruff` a runner happens to have.
+only on the code, not on whichever `ruff` a runner happens to have. A pinned
+[`mypy`](https://mypy-lang.org/) type check is the third code gate, run inside each
+component's CI job against that component's installed, typed dependencies (config in
+`mypy.ini`).
 
 ```bash
 ruff format --check .   # formatting gate
 ruff check .            # lint gate
+mypy tests              # type gate (likewise: mypy enrichment-mcp, mypy ingestion)
 ```
 
 CI runs these as five independent jobs — `lint` (repo-wide ruff), `harness`

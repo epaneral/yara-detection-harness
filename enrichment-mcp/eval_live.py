@@ -15,6 +15,8 @@ and 1 otherwise.
 
 import asyncio
 import json
+from collections.abc import Callable
+from typing import Literal
 
 import eval_harness
 import server
@@ -23,8 +25,10 @@ import server
 # flagged on VirusTotal, so it is a stable "known-malicious" fixture.
 EICAR_SHA256 = "275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f"
 
+Kind = Literal["file", "url", "ip_address", "domain"]
+
 # (label, indicator type, indicator, predicate over the consensus block)
-INVARIANTS = [
+INVARIANTS: list[tuple[str, Kind, str, Callable[[dict], bool]]] = [
     ("EICAR hash is flagged malicious", "file", EICAR_SHA256, lambda c: c["malicious"] is True),
     (
         "A major reputable domain is not malicious",

@@ -39,7 +39,7 @@ def run(feed: str | None, scrape: str | None, store_path: str | Path) -> int:
     return 0
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Ingest IOCs into the normalized JSONL store.")
     parser.add_argument("--feed", help="structured JSON feed (file path or http(s) URL)")
     parser.add_argument("--scrape", help="HTML/text page to scrape for IOCs (file or http(s) URL)")

@@ -17,6 +17,7 @@ Three independent Python components with separate deps. `pytest.ini` scopes `tes
 pip install -r requirements.txt && pytest -v        # YARA harness
 python tests/retrohunt.py                           # retro-hunt coverage map (--rule <f.yar> previews a draft)
 ruff format --check . && ruff check .               # format + lint gates (pinned ruff==0.15.18 in CI)
+mypy tests; mypy enrichment-mcp; mypy ingestion     # type gates (pinned mypy==2.3.0, config in mypy.ini; each needs that component's deps)
 pip install -r enrichment-mcp/requirements-dev.txt && pytest enrichment-mcp -v   # MCP server
 pip install -r ingestion/requirements-dev.txt && pytest ingestion -v   # IOC ingestion
 # yaraQA rule-quality gate — mirrors the `yaraqa` CI job (yaraQA is cloned, not on PyPI)
@@ -32,8 +33,9 @@ installs). CI instead installs from fully-resolved, hashed lock files — `requi
 after editing a pin (command is in each lock's header):
 `uv pip compile <src> -o <lock> --universal --generate-hashes`.
 
-CI = `lint` + `harness` + `enrichment-mcp` + `yaraqa` + `ingestion` jobs, plus an `all-green`
-aggregate that branch protection requires; a skipped needed job fails it on purpose.
+CI = `lint` + `harness` + `enrichment-mcp` + `yaraqa` + `ingestion` jobs (the three component
+jobs also run `mypy` after their tests), plus an `all-green` aggregate that branch protection
+requires; a skipped needed job fails it on purpose.
 
 ## Architecture
 
