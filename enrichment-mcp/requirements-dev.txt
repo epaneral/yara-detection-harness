@@ -6,3 +6,4 @@
 #   uv pip compile requirements-dev.txt -o requirements-dev.lock --universal --generate-hashes
 -r requirements.txt
 pytest==9.1.1
+mypy==2.3.0     # type gate (CI runs `mypy enrichment-mcp`; config in ../mypy.ini)

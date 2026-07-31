@@ -51,6 +51,8 @@ jobs:
       # resolving to something new.
       - run: pip install -r requirements.lock
       - run: pytest -v
+      # Type gate (config in mypy.ini; mypy + stubs come from the lock installed above).
+      - run: mypy tests
       # Non-blocking retro-hunt: print the ruleset's corpus coverage map on every run
       # (informational -- the tool exits 0 on findings; see tests/retrohunt.py).
       - run: python tests/retrohunt.py
@@ -71,6 +73,7 @@ jobs:
           cache-dependency-path: enrichment-mcp/requirements-dev.lock
       - run: pip install -r enrichment-mcp/requirements-dev.lock
       - run: pytest enrichment-mcp -v
+      - run: mypy enrichment-mcp
 
   # yaraQA rule-quality gate (Florian Roth's analyzer wired in as a gate, not
   # just a runner). yaraQA is not on PyPI, so CI clones it at a pinned commit;
@@ -119,6 +122,7 @@ jobs:
           cache-dependency-path: ingestion/requirements-dev.lock
       - run: pip install -r ingestion/requirements-dev.lock
       - run: pytest ingestion -v
+      - run: mypy ingestion
 
   # Single aggregate gate. Branch protection requires only this check, so jobs
   # can be added or renamed above without touching the protection rule - just

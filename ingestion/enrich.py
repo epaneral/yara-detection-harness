@@ -93,7 +93,7 @@ async def _drive_server(
         return await enrich_indicators(indicators, call_tool, delay_seconds)
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Enrich the ingested IOC store via the enrichment-mcp server."
     )

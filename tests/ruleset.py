@@ -16,7 +16,8 @@ MANIFEST = REPO / "tests" / "manifest.yml"
 
 def load_manifest() -> list[dict]:
     """The manifest's `samples` list (each: path, label, expected_rules)."""
-    return yaml.safe_load(MANIFEST.read_text())["samples"]
+    samples: list[dict] = yaml.safe_load(MANIFEST.read_text())["samples"]
+    return samples
 
 
 def compile_ruleset() -> yara.Rules:
