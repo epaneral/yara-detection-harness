@@ -14,9 +14,7 @@ things that look similar but aren't.
 ## Why this exists
 
 Content-scanning at scale is a data-and-precision problem before it's a
-threat-intelligence problem. The hard part isn't writing a rule that fires on a
-reverse shell — it's writing one that fires on the reverse shell and *not* on the
-backup script three lines away that happens to redirect with `>&`. This repo is
+threat-intelligence problem. The scanner must maximize specificity without compromising sensitivity. This repo is
 built around that problem: every benign sample is a deliberate **near-miss** for one
 of the malicious samples, so the suite measures precision, not just coverage.
 
